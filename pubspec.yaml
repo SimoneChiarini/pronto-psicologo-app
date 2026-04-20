@@ -1,0 +1,27 @@
+name: pronto_psicologo_flutter
+description: Frontend mobile app for ProntoPsicologo.
+publish_to: 'none'
+version: 0.0.1+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.5
+  http: ^1.0.0
+  http_parser: ^4.0.0
+  shared_preferences: ^2.0.17
+  image_picker: ^1.0.4
+  geolocator: ^10.1.0
+  url_launcher: ^6.2.4
+  google_fonts: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
