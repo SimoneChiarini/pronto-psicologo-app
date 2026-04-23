@@ -216,19 +216,17 @@ class _AnswerCard extends StatelessWidget {
     final imageUrl = psych['profileImage'] as String?;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(6),
       child: Container(
           width: MediaQuery.of(context).size.width - 32,
           height: double.infinity,
           decoration: BoxDecoration(
-            color: dimmed
-                ? AppColors.surface.withOpacity(0.7)
-                : AppColors.surface,
-            borderRadius: BorderRadius.circular(24),
+            color: dimmed ? AppColors.surface : AppColors.bg,
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(color: AppColors.glassBorder),
             boxShadow: dimmed
                 ? []
-                : [BoxShadow(color: Colors.black.withOpacity(0.6), blurRadius: 24, offset: const Offset(0, 8))],
+                : [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -237,7 +235,8 @@ class _AnswerCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: const BoxDecoration(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
                   border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
                 ),
                 child: Row(
@@ -428,15 +427,14 @@ class _ActionButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 60,
-        height: 60,
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppColors.glassBg,
-          border: Border.all(color: color.withOpacity(0.5), width: 1.5),
-          boxShadow: [BoxShadow(color: color.withOpacity(0.2), blurRadius: 12, spreadRadius: 1)],
+          color: AppColors.bg,
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(color: AppColors.glassBorder),
         ),
-        child: Icon(icon, color: color, size: 26),
+        child: Icon(icon, color: AppColors.bgInverse, size: 20),
       ),
     );
   }

@@ -1,11 +1,10 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 class GlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
-  final double blur;
+  final double blur;   // kept for API compat, unused
   final double radius;
   final VoidCallback? onTap;
   final bool noPadding;
@@ -15,7 +14,7 @@ class GlassCard extends StatelessWidget {
     required this.child,
     this.padding,
     this.blur = 10,
-    this.radius = 16,
+    this.radius = 6,
     this.onTap,
     this.noPadding = false,
   });
@@ -25,7 +24,7 @@ class GlassCard extends StatelessWidget {
     Widget content = noPadding
         ? child
         : Padding(
-            padding: padding ?? const EdgeInsets.all(16),
+            padding: padding ?? const EdgeInsets.all(14),
             child: child,
           );
 
@@ -35,31 +34,28 @@ class GlassCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(radius),
-          splashColor: Colors.white.withOpacity(0.05),
-          highlightColor: Colors.white.withOpacity(0.03),
+          splashColor: AppColors.bgInverse.withOpacity(0.04),
+          highlightColor: AppColors.bgInverse.withOpacity(0.02),
           child: content,
         ),
       );
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.glassBg,
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: AppColors.glassBorder, width: 1),
-          ),
-          child: content,
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: AppColors.glassBorder, width: 1),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: content,
       ),
     );
   }
 }
 
-/// Background scuro con glow radiali sottili — rende visibile l'effetto glass.
+/// Sfondo principale dell'app — bianco piatto, nessun glow.
 class AppBackground extends StatelessWidget {
   final Widget child;
   const AppBackground({super.key, required this.child});
@@ -68,39 +64,7 @@ class AppBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.bg,
-      child: Stack(
-        children: [
-          Positioned(
-            top: -120, left: -80,
-            child: _Glow(size: 380, opacity: 0.06),
-          ),
-          Positioned(
-            bottom: -80, right: -60,
-            child: _Glow(size: 300, opacity: 0.04),
-          ),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _Glow extends StatelessWidget {
-  final double size;
-  final double opacity;
-  const _Glow({required this.size, required this.opacity});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [Colors.white.withOpacity(opacity), Colors.transparent],
-        ),
-      ),
+      child: child,
     );
   }
 }

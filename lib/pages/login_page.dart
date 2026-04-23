@@ -150,34 +150,41 @@ class _Logo extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 44, height: 44,
+              width: 30, height: 30,
               decoration: BoxDecoration(
-                color: AppColors.glassBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.glassBorder),
+                color: AppColors.bgInverse,
+                borderRadius: BorderRadius.circular(7),
               ),
-              child: const Icon(Icons.psychology_rounded, color: AppColors.textPrimary, size: 26),
+              alignment: Alignment.center,
+              child: const Text(
+                'p',
+                style: TextStyle(
+                  color: AppColors.textInverse,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 10),
             RichText(
               text: const TextSpan(
                 children: [
                   TextSpan(
                     text: 'Pronto',
                     style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
+                      color: AppColors.textStrong,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.01,
                     ),
                   ),
                   TextSpan(
                     text: 'Psicologo',
                     style: TextStyle(
                       color: AppColors.textSecondary,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w300,
-                      letterSpacing: -0.5,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: -0.01,
                     ),
                   ),
                 ],
@@ -185,10 +192,10 @@ class _Logo extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         const Text(
           'Supporto psicologico sempre vicino a te.',
-          style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+          style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
         ),
       ],
     );

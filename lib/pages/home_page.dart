@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -101,33 +100,28 @@ class _GlassNavRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width >= 700;
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.glassBg,
-            border: Border(right: BorderSide(color: AppColors.glassBorder)),
-          ),
-          child: NavigationRail(
-            backgroundColor: Colors.transparent,
-            selectedIndex: selectedIndex,
-            onDestinationSelected: onDestinationSelected,
-            useIndicator: true,
-            indicatorColor: Colors.white.withOpacity(0.18),
-            selectedIconTheme: const IconThemeData(color: AppColors.textPrimary, size: 22),
-            unselectedIconTheme: const IconThemeData(color: AppColors.textTertiary, size: 22),
-            selectedLabelTextStyle: const TextStyle(
-              color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.w600,
-            ),
-            unselectedLabelTextStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-            labelType: isWide ? NavigationRailLabelType.all : NavigationRailLabelType.none,
-            minWidth: isWide ? 130 : 64,
-            leading: leading,
-            trailing: trailing,
-            destinations: destinations,
-          ),
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.bgInverse,
+        border: Border(right: BorderSide(color: AppColors.borderSubtle)),
+      ),
+      child: NavigationRail(
+        backgroundColor: Colors.transparent,
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onDestinationSelected,
+        useIndicator: true,
+        indicatorColor: AppColors.bgInverseHover,
+        selectedIconTheme: const IconThemeData(color: AppColors.textInverse, size: 20),
+        unselectedIconTheme: const IconThemeData(color: Color(0xFF777777), size: 20),
+        selectedLabelTextStyle: const TextStyle(
+          color: AppColors.textInverse, fontSize: 11, fontWeight: FontWeight.w600,
         ),
+        unselectedLabelTextStyle: const TextStyle(color: Color(0xFF777777), fontSize: 11),
+        labelType: isWide ? NavigationRailLabelType.all : NavigationRailLabelType.none,
+        minWidth: isWide ? 130 : 56,
+        leading: leading,
+        trailing: trailing,
+        destinations: destinations,
       ),
     );
   }
@@ -907,13 +901,10 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
-                  color: activeCount > 0
-                      ? AppColors.primary.withOpacity(0.2)
-                      : AppColors.glassBg,
-                  borderRadius: BorderRadius.circular(14),
+                  color: activeCount > 0 ? AppColors.bgInverse : AppColors.bg,
+                  borderRadius: BorderRadius.circular(5),
                   border: Border.all(
-                    color: activeCount > 0 ? AppColors.primary : AppColors.glassBorder,
-                    width: activeCount > 0 ? 1.5 : 1,
+                    color: activeCount > 0 ? AppColors.bgInverse : AppColors.glassBorder,
                   ),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -938,7 +929,7 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text('$activeCount',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textInverse),
                       ),
                     ),
                   ],
@@ -1013,12 +1004,12 @@ class _ActiveChip extends StatelessWidget {
       margin: const EdgeInsets.only(right: 6),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary.withOpacity(0.5)),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500)),
+        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
         const SizedBox(width: 4),
         GestureDetector(
           onTap: onRemove,
@@ -1085,14 +1076,12 @@ class _FilterSheetState extends State<_FilterSheet> {
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).viewInsets.bottom;
     return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      child: Container(
           padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomPad),
           decoration: const BoxDecoration(
-            color: AppColors.glassBg,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            color: AppColors.bg,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
             border: Border(top: BorderSide(color: AppColors.glassBorder)),
           ),
           child: Column(
@@ -1163,18 +1152,18 @@ class _FilterSheetState extends State<_FilterSheet> {
                       onSelected: (v) => setState(() {
                         if (v) _specs.add(e.key); else _specs.remove(e.key);
                       }),
-                      selectedColor: AppColors.primary.withOpacity(0.22),
-                      checkmarkColor: AppColors.primary,
+                      selectedColor: AppColors.bgInverse,
+                      checkmarkColor: AppColors.textInverse,
                       labelStyle: TextStyle(
-                        fontSize: 13,
-                        color: sel ? AppColors.primary : AppColors.textSecondary,
+                        fontSize: 12,
+                        color: sel ? AppColors.textInverse : AppColors.textSecondary,
                         fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
                       ),
                       side: BorderSide(
-                        color: sel ? AppColors.primary : AppColors.textTertiary.withOpacity(0.4),
+                        color: sel ? AppColors.bgInverse : AppColors.glassBorder,
                       ),
-                      backgroundColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      backgroundColor: AppColors.bg,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
                     );
                   }).toList(),
                 ),
@@ -1196,7 +1185,6 @@ class _FilterSheetState extends State<_FilterSheet> {
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -1236,21 +1224,20 @@ class _ChoiceItem extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary.withOpacity(0.2) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
+          color: selected ? AppColors.bgInverse : AppColors.bg,
+          borderRadius: BorderRadius.circular(5),
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.textTertiary.withOpacity(0.4),
-            width: selected ? 1.5 : 1,
+            color: selected ? AppColors.bgInverse : AppColors.glassBorder,
           ),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           if (icon != null) ...[
-            Icon(icon, size: 15, color: selected ? AppColors.primary : AppColors.textSecondary),
+            Icon(icon, size: 14, color: selected ? AppColors.textInverse : AppColors.textSecondary),
             const SizedBox(width: 5),
           ],
           Text(label, style: TextStyle(
-            fontSize: 13,
-            color: selected ? AppColors.primary : AppColors.textSecondary,
+            fontSize: 12,
+            color: selected ? AppColors.textInverse : AppColors.textSecondary,
             fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
           )),
         ]),
@@ -1376,8 +1363,8 @@ class _PsychSquareCard extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(5),
                             border: Border.all(color: AppColors.glassBorder),
                           ),
                           child: const Icon(Icons.phone_rounded, size: 14, color: AppColors.textPrimary),
@@ -2176,10 +2163,10 @@ class _AdminConvDetailState extends State<_AdminConvDetail> {
                               children: [
                                 Text(senderLabel,
                                     style: TextStyle(fontSize: 10,
-                                        color: fromPsych ? AppColors.bg.withOpacity(0.6) : AppColors.textTertiary)),
+                                        color: fromPsych ? AppColors.textInverse.withOpacity(0.6) : AppColors.textTertiary)),
                                 const SizedBox(height: 4),
                                 Text(msg['content'] as String? ?? '',
-                                    style: TextStyle(color: fromPsych ? AppColors.bg : AppColors.textPrimary)),
+                                    style: TextStyle(color: fromPsych ? AppColors.textInverse : AppColors.textPrimary)),
                               ],
                             ),
                           ),

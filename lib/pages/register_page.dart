@@ -336,26 +336,26 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                         const SizedBox(height: 14),
                         Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                          spacing: 6,
+                          runSpacing: 6,
                           children: _specLabels.entries.map((e) {
                             final selected = _specs[e.key] ?? false;
                             return FilterChip(
                               label: Text(e.value),
                               selected: selected,
                               onSelected: (v) => setState(() => _specs[e.key] = v),
-                              selectedColor: AppColors.primary.withOpacity(0.25),
-                              checkmarkColor: AppColors.primary,
+                              selectedColor: AppColors.bgInverse,
+                              checkmarkColor: AppColors.textInverse,
                               labelStyle: TextStyle(
-                                fontSize: 13,
-                                color: selected ? AppColors.primary : AppColors.textSecondary,
+                                fontSize: 12,
+                                color: selected ? AppColors.textInverse : AppColors.textSecondary,
                                 fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                               ),
                               side: BorderSide(
-                                color: selected ? AppColors.primary : AppColors.textTertiary.withOpacity(0.4),
+                                color: selected ? AppColors.bgInverse : AppColors.glassBorder,
                               ),
-                              backgroundColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              backgroundColor: AppColors.bg,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
                             );
                           }).toList(),
                         ),
@@ -408,25 +408,24 @@ class _GenderChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary.withOpacity(0.2) : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
+          color: selected ? AppColors.bgInverse : AppColors.bg,
+          borderRadius: BorderRadius.circular(5),
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.textTertiary.withOpacity(0.4),
-            width: selected ? 1.5 : 1,
+            color: selected ? AppColors.bgInverse : AppColors.glassBorder,
           ),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 20, color: selected ? AppColors.primary : AppColors.textSecondary),
-          const SizedBox(width: 8),
+          Icon(icon, size: 16, color: selected ? AppColors.textInverse : AppColors.textSecondary),
+          const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-              color: selected ? AppColors.primary : AppColors.textSecondary,
+              color: selected ? AppColors.textInverse : AppColors.textSecondary,
             ),
           ),
         ]),

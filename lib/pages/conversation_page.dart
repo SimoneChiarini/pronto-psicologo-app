@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
@@ -101,10 +100,7 @@ class _ConversationPageState extends State<ConversationPage> {
         onSubmitted: () {
           setState(() => _alreadyReviewed = true);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Recensione inviata, grazie!'),
-              backgroundColor: AppColors.success,
-            ),
+            const SnackBar(content: Text('Recensione inviata, grazie!')),
           );
         },
       ),
@@ -115,72 +111,67 @@ class _ConversationPageState extends State<ConversationPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      extendBodyBehindAppBar: true,
-      appBar: _GlassAppBar(
+      appBar: _ConversationAppBar(
         psychologistLabel: widget.psychologistLabel,
         role: widget.role,
         alreadyReviewed: _alreadyReviewed,
         onReview: _openReviewDialog,
         onRefresh: _loadMessages,
       ),
-      body: AppBackground(
-        child: Column(
-          children: [
-            SizedBox(height: MediaQuery.of(context).padding.top + 60),
-
-            if (widget.questionTitle != null || widget.answerContent != null)
-              _ContextBanner(
-                questionTitle: widget.questionTitle,
-                answerContent: widget.answerContent,
-              ),
-
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.textSecondary))
-                  : _messages.isEmpty
-                      ? _EmptyChat(psychologistLabel: widget.psychologistLabel)
-                      : ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          itemCount: _messages.length,
-                          itemBuilder: (ctx, i) {
-                            final msg = _messages[i];
-                            final isMine = widget.role == 'USER'
-                                ? msg['senderUserId'] == widget.userId
-                                : msg['senderPsychId'] != null;
-                            return _MessageBubble(
-                              content: msg['content'] as String,
-                              isMine: isMine,
-                              createdAt: msg['createdAt'] as String?,
-                            );
-                          },
-                        ),
+      body: Column(
+        children: [
+          if (widget.questionTitle != null || widget.answerContent != null)
+            _ContextBanner(
+              questionTitle: widget.questionTitle,
+              answerContent: widget.answerContent,
             ),
 
-            _MessageInput(
-              controller: _messageController,
-              sending: _sending,
-              onSend: _send,
-            ),
-          ],
-        ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.bgInverse))
+                : _messages.isEmpty
+                    ? _EmptyChat(psychologistLabel: widget.psychologistLabel)
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        itemCount: _messages.length,
+                        itemBuilder: (ctx, i) {
+                          final msg = _messages[i];
+                          final isMine = widget.role == 'USER'
+                              ? msg['senderUserId'] == widget.userId
+                              : msg['senderPsychId'] != null;
+                          return _MessageBubble(
+                            content: msg['content'] as String,
+                            isMine: isMine,
+                            createdAt: msg['createdAt'] as String?,
+                          );
+                        },
+                      ),
+          ),
+
+          _MessageInput(
+            controller: _messageController,
+            sending: _sending,
+            onSend: _send,
+          ),
+        ],
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// Glass AppBar
+// AppBar
 // ─────────────────────────────────────────────────────────────
 
-class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
+class _ConversationAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String psychologistLabel;
   final String role;
   final bool alreadyReviewed;
   final VoidCallback onReview;
   final VoidCallback onRefresh;
 
-  const _GlassAppBar({
+  const _ConversationAppBar({
     required this.psychologistLabel,
     required this.role,
     required this.alreadyReviewed,
@@ -189,60 +180,56 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(60);
+  Size get preferredSize => const Size.fromHeight(48);
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          height: MediaQuery.of(context).padding.top + 60,
-          decoration: const BoxDecoration(
-            color: AppColors.glassBg,
-            border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
+    return Container(
+      height: 48,
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textSecondary, size: 18),
+            onPressed: () => Navigator.pop(context),
           ),
-          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textSecondary, size: 18),
-                onPressed: () => Navigator.pop(context),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      psychologistLabel,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const Text(
-                      'Conversazione',
-                      style: TextStyle(fontSize: 11, color: AppColors.textTertiary),
-                    ),
-                  ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  psychologistLabel,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textStrong,
+                    letterSpacing: -0.01,
+                  ),
                 ),
-              ),
-              if (role == 'USER' && !alreadyReviewed)
-                IconButton(
-                  icon: const Icon(Icons.star_outline_rounded, color: AppColors.star),
-                  tooltip: 'Lascia una recensione',
-                  onPressed: onReview,
+                const Text(
+                  'Conversazione',
+                  style: TextStyle(fontSize: 11, color: AppColors.textTertiary),
                 ),
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded, color: AppColors.textSecondary, size: 20),
-                tooltip: 'Aggiorna',
-                onPressed: onRefresh,
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          if (role == 'USER' && !alreadyReviewed)
+            IconButton(
+              icon: const Icon(Icons.star_outline_rounded, color: AppColors.textTertiary, size: 18),
+              tooltip: 'Lascia una recensione',
+              onPressed: onReview,
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.textTertiary, size: 18),
+            tooltip: 'Aggiorna',
+            onPressed: onRefresh,
+          ),
+        ],
       ),
     );
   }
@@ -270,25 +257,25 @@ class _ContextBannerState extends State<_ContextBanner> {
       onTap: () => setState(() => _expanded = !_expanded),
       child: Container(
         width: double.infinity,
-        color: AppColors.glassBg,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        color: AppColors.bgPanel,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.info_outline_rounded, size: 14, color: AppColors.textSecondary),
+                const Icon(Icons.info_outline_rounded, size: 13, color: AppColors.textTertiary),
                 const SizedBox(width: 6),
                 const Expanded(
                   child: Text(
                     'Tocca per vedere domanda e risposta iniziale',
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                   ),
                 ),
                 Icon(
                   _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
                   color: AppColors.textTertiary,
-                  size: 18,
+                  size: 16,
                 ),
               ],
             ),
@@ -318,8 +305,8 @@ class _BannerRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textTertiary, fontWeight: FontWeight.w600)),
-          Text(text, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary), maxLines: 3, overflow: TextOverflow.ellipsis),
+          Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textTertiary, fontWeight: FontWeight.w600, letterSpacing: 0.04)),
+          Text(text, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary), maxLines: 3, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -340,14 +327,15 @@ class _EmptyChat extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.chat_bubble_outline_rounded, size: 56, color: AppColors.textTertiary),
-          const SizedBox(height: 16),
-          const Text('Nessun messaggio ancora', style: TextStyle(color: AppColors.textSecondary, fontSize: 16, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 8),
+          const Icon(Icons.chat_bubble_outline_rounded, size: 40, color: AppColors.borderSubtle),
+          const SizedBox(height: 14),
+          const Text('Nessun messaggio ancora',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
           Text(
             'Inizia la conversazione con $psychologistLabel',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
+            style: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
           ),
         ],
       ),
@@ -381,18 +369,17 @@ class _MessageBubble extends StatelessWidget {
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.symmetric(vertical: 3),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isMine ? Colors.white : AppColors.glassBg,
+          color: isMine ? AppColors.bgInverse : AppColors.borderFaint,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMine ? 18 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 18),
+            topLeft: const Radius.circular(12),
+            topRight: const Radius.circular(12),
+            bottomLeft: Radius.circular(isMine ? 12 : 3),
+            bottomRight: Radius.circular(isMine ? 3 : 12),
           ),
-          border: isMine ? null : Border.all(color: AppColors.glassBorder),
         ),
         child: Column(
           crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -400,16 +387,18 @@ class _MessageBubble extends StatelessWidget {
             Text(
               content,
               style: TextStyle(
-                color: isMine ? AppColors.bg : AppColors.textPrimary,
-                fontSize: 15,
+                color: isMine ? AppColors.textInverse : AppColors.textStrong,
+                fontSize: 13,
+                height: 1.45,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               _formatTime(createdAt),
               style: TextStyle(
-                fontSize: 11,
-                color: isMine ? Colors.black38 : AppColors.textTertiary,
+                fontSize: 10.5,
+                color: isMine ? Colors.white.withOpacity(0.5) : AppColors.textTertiary,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ],
@@ -436,70 +425,65 @@ class _MessageInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: EdgeInsets.only(
-            left: 12,
-            right: 8,
-            top: 10,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 12,
-          ),
-          decoration: const BoxDecoration(
-            color: AppColors.glassBg,
-            border: Border(top: BorderSide(color: AppColors.glassBorder)),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
-                  decoration: InputDecoration(
-                    hintText: 'Scrivi un messaggio...',
-                    hintStyle: const TextStyle(color: AppColors.textTertiary),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide.none,
-                    ),
-                    filled: true,
-                    fillColor: AppColors.glassBg,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: const BorderSide(color: AppColors.glassBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: const BorderSide(color: AppColors.glassStroke),
-                    ),
-                  ),
-                  textCapitalization: TextCapitalization.sentences,
-                  onSubmitted: (_) => onSend(),
+    return Container(
+      padding: EdgeInsets.only(
+        left: 12,
+        right: 10,
+        top: 8,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 10,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.bg,
+        border: Border(top: BorderSide(color: AppColors.glassBorder)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Scrivi un messaggio…',
+                hintStyle: const TextStyle(color: AppColors.textPlaceholder, fontSize: 13),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: AppColors.glassBorder),
+                ),
+                filled: true,
+                fillColor: AppColors.surface,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: AppColors.glassBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: AppColors.textPrimary, width: 1.5),
                 ),
               ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: sending ? null : onSend,
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  child: sending
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.bg),
-                        )
-                      : const Icon(Icons.send_rounded, color: AppColors.bg, size: 20),
-                ),
-              ),
-            ],
+              textCapitalization: TextCapitalization.sentences,
+              onSubmitted: (_) => onSend(),
+            ),
           ),
-        ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: sending ? null : onSend,
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: sending ? AppColors.borderSubtle : AppColors.bgInverse,
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: sending
+                  ? const Padding(
+                      padding: EdgeInsets.all(9),
+                      child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.textInverse),
+                    )
+                  : const Icon(Icons.arrow_upward_rounded, color: AppColors.textInverse, size: 16),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -567,16 +551,16 @@ class _ReviewDialogState extends State<_ReviewDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF1A1A1A),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Lascia una recensione', style: TextStyle(color: AppColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w600)),
+      title: const Text('Lascia una recensione'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.psychologistLabel, style: const TextStyle(color: AppColors.textTertiary, fontSize: 13)),
-          const SizedBox(height: 20),
-          const Text('Valutazione', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 13)),
+          Text(widget.psychologistLabel,
+              style: const TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+          const SizedBox(height: 16),
+          const Text('Valutazione',
+              style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 12)),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -588,34 +572,19 @@ class _ReviewDialogState extends State<_ReviewDialog> {
                   child: Icon(
                     i < _rating ? Icons.star_rounded : Icons.star_outline_rounded,
                     color: AppColors.star,
-                    size: 38,
+                    size: 34,
                   ),
                 ),
               );
             }),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           TextField(
             controller: _commentController,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-            decoration: InputDecoration(
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            decoration: const InputDecoration(
               labelText: 'Commento (facoltativo)',
-              labelStyle: const TextStyle(color: AppColors.textTertiary),
               alignLabelWithHint: true,
-              filled: true,
-              fillColor: AppColors.glassBg,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.glassBorder),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.glassBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.glassStroke),
-              ),
             ),
             maxLines: 3,
           ),
@@ -624,12 +593,13 @@ class _ReviewDialogState extends State<_ReviewDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Annulla', style: TextStyle(color: AppColors.textSecondary)),
+          child: const Text('Annulla'),
         ),
         ElevatedButton(
           onPressed: _loading ? null : _submit,
           child: _loading
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.bg))
+              ? const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.textInverse))
               : const Text('Invia'),
         ),
       ],

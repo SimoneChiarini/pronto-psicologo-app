@@ -110,11 +110,12 @@ class _ImagePickerFieldState extends State<ImagePickerField> {
               ),
               Container(
                 padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
+                decoration: BoxDecoration(
+                  color: AppColors.bgInverse,
                   shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.bg, width: 2),
                 ),
-                child: const Icon(Icons.camera_alt_rounded, size: 16, color: AppColors.bg),
+                child: const Icon(Icons.camera_alt_rounded, size: 14, color: AppColors.textInverse),
               ),
             ],
           ),
