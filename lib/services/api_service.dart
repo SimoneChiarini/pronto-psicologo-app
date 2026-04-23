@@ -5,7 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'auth_service.dart';
 
 class ApiService {
-  static const baseUrl = AuthService.baseUrl;
+  static final baseUrl = AuthService.baseUrl;
 
   final AuthService _auth = AuthService();
 

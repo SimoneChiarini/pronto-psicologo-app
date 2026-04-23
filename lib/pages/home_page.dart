@@ -12,6 +12,14 @@ import '../widgets/glass_card.dart';
 import '../widgets/image_picker_field.dart';
 import '../widgets/tinder_swiper.dart';
 
+String _psychName(Map<String, dynamic> psych) {
+  final u = psych['user'] as Map<String, dynamic>? ?? {};
+  final fn = (u['firstName'] as String? ?? '').trim();
+  final ln = (u['lastName'] as String? ?? '').trim();
+  final full = '$fn $ln'.trim();
+  return full.isNotEmpty ? full : psych['alboCode'] as String? ?? 'Psicologo';
+}
+
 // ─────────────────────────────────────────────────────────────
 // ROOT
 // ─────────────────────────────────────────────────────────────
@@ -526,7 +534,7 @@ class _MyAnswersTabState extends State<_MyAnswersTab> with AutomaticKeepAliveCli
     Navigator.of(context).pushNamed('/conversation', arguments: {
       'conversationId':    conversation['id'] as String,
       'psychologistId':    item['psychologistId'] as String,
-      'psychologistLabel': 'Albo: ${psych['alboCode'] ?? 'Psicologo'}',
+      'psychologistLabel': _psychName(psych),
       'userId':            widget.userId,
       'role':              'USER',
       'questionTitle':     question['title'] as String?,
@@ -586,7 +594,7 @@ class _ConversationsTabState extends State<_ConversationsTab> with AutomaticKeep
     if (widget.role == 'USER') {
       final psych = conv['Psychologist'] as Map<String, dynamic>? ?? {};
       psychologistId = conv['psychologistId'] as String;
-      psychologistLabel = 'Albo: ${psych['alboCode'] ?? 'Psicologo'}';
+      psychologistLabel = _psychName(psych);
     } else {
       final user = conv['User'] as Map<String, dynamic>? ?? {};
       psychologistId = conv['psychologistId'] as String;
@@ -626,9 +634,14 @@ class _ConversationsTabState extends State<_ConversationsTab> with AutomaticKeep
           String? imageUrl;
           if (widget.role == 'USER') {
             final psych = conv['Psychologist'] as Map<String, dynamic>? ?? {};
-            title = 'Albo: ${psych['alboCode'] ?? 'Psicologo'}';
+            title = _psychName(psych);
             imageUrl = psych['profileImage'] as String?;
-            if (psych['verified'] == true) subtitle = '✓ Verificato';
+            final albo = psych['alboCode'] as String?;
+            if (psych['verified'] == true) {
+              subtitle = albo != null && albo.isNotEmpty ? '✓ Verificato · Albo: $albo' : '✓ Verificato';
+            } else if (albo != null && albo.isNotEmpty) {
+              subtitle = 'Albo: $albo';
+            }
           } else {
             final user = conv['User'] as Map<String, dynamic>? ?? {};
             final fn = user['firstName'] as String? ?? '';
@@ -801,6 +814,10 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
   final _searchCtrl = TextEditingController();
   String _query = '';
 
+  // Filtri attivi
+  bool? _filterGender;          // null=tutti, true=uomo, false=donna
+  final Set<String> _filterSpecs = {};
+
   @override
   void initState() {
     super.initState();
@@ -821,13 +838,43 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
     }
   }
 
+  int get _activeFilterCount =>
+      (_filterGender != null ? 1 : 0) + _filterSpecs.length;
+
   List<Map<String, dynamic>> get _filtered {
-    if (_query.isEmpty) return _psychologists ?? [];
-    return (_psychologists ?? []).where((p) =>
-      (p['alboCode'] as String? ?? '').toLowerCase().contains(_query) ||
-      (p['bio'] as String? ?? '').toLowerCase().contains(_query) ||
-      (p['address'] as String? ?? '').toLowerCase().contains(_query),
-    ).toList();
+    var list = _psychologists ?? [];
+    if (_query.isNotEmpty) {
+      list = list.where((p) =>
+        (p['alboCode'] as String? ?? '').toLowerCase().contains(_query) ||
+        (p['bio'] as String? ?? '').toLowerCase().contains(_query) ||
+        (p['address'] as String? ?? '').toLowerCase().contains(_query),
+      ).toList();
+    }
+    if (_filterGender != null) {
+      list = list.where((p) => p['isMale'] == _filterGender).toList();
+    }
+    if (_filterSpecs.isNotEmpty) {
+      list = list.where((p) => _filterSpecs.every((s) => p[s] == true)).toList();
+    }
+    return list;
+  }
+
+  Future<void> _openFilters() async {
+    final result = await showModalBottomSheet<_FilterResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _FilterSheet(
+        initialGender: _filterGender,
+        initialSpecs: Set.from(_filterSpecs),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _filterGender = result.gender;
+        _filterSpecs..clear()..addAll(result.specs);
+      });
+    }
   }
 
   int _crossAxisCount(double width) {
@@ -843,31 +890,372 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
     final filtered = _filtered;
     final width = MediaQuery.of(context).size.width;
     final cols = _crossAxisCount(width);
+    final activeCount = _activeFilterCount;
 
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-        child: _searchBar(_searchCtrl, 'Cerca per albo, bio, indirizzo...'),
-      ),
-      Expanded(
-        child: filtered.isEmpty
-            ? _emptyState(icon: Icons.psychology_outlined, title: 'Nessuno psicologo trovato')
-            : RefreshIndicator(
-                onRefresh: _load,
-                child: GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: cols,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: cols == 1 ? 0.85 : 0.75,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: Row(children: [
+            Expanded(child: _searchBar(_searchCtrl, 'Cerca per albo, bio, indirizzo...')),
+            const SizedBox(width: 8),
+            // Bottone Filtra con badge
+            GestureDetector(
+              onTap: _openFilters,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: activeCount > 0
+                      ? AppColors.primary.withOpacity(0.2)
+                      : AppColors.glassBg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: activeCount > 0 ? AppColors.primary : AppColors.glassBorder,
+                    width: activeCount > 0 ? 1.5 : 1,
                   ),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, i) => _PsychSquareCard(p: filtered[i]),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.tune_rounded,
+                    size: 18,
+                    color: activeCount > 0 ? AppColors.primary : AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text('Filtra',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: activeCount > 0 ? FontWeight.w600 : FontWeight.normal,
+                      color: activeCount > 0 ? AppColors.primary : AppColors.textSecondary,
+                    ),
+                  ),
+                  if (activeCount > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text('$activeCount',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ]),
+              ),
+            ),
+          ]),
+        ),
+
+        // Chips dei filtri attivi
+        if (activeCount > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                if (_filterGender != null)
+                  _ActiveChip(
+                    label: _filterGender! ? 'Uomo' : 'Donna',
+                    onRemove: () => setState(() => _filterGender = null),
+                  ),
+                ..._filterSpecs.map((s) => _ActiveChip(
+                  label: _PsychFilter.specLabels[s] ?? s,
+                  onRemove: () => setState(() => _filterSpecs.remove(s)),
+                )),
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: () => setState(() { _filterGender = null; _filterSpecs.clear(); }),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Azzera tutto', style: TextStyle(fontSize: 12)),
+                ),
+              ]),
+            ),
+          ),
+
+        Expanded(
+          child: filtered.isEmpty
+              ? _emptyState(icon: Icons.psychology_outlined, title: 'Nessuno psicologo trovato')
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: cols,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: cols == 1 ? 0.85 : 0.75,
+                    ),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, i) => _PsychSquareCard(p: filtered[i]),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+// Chip filtro attivo rimovibile
+class _ActiveChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onRemove;
+  const _ActiveChip({required this.label, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.primary.withOpacity(0.5)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500)),
+        const SizedBox(width: 4),
+        GestureDetector(
+          onTap: onRemove,
+          child: const Icon(Icons.close_rounded, size: 14, color: AppColors.primary),
+        ),
+      ]),
+    );
+  }
+}
+
+// Dati condivisi filtri
+class _PsychFilter {
+  static const Map<String, String> specLabels = {
+    'specAnsia': 'Ansia',
+    'specUmore': 'Umore / depressione',
+    'specStress': 'Stress / lavoro',
+    'specRelazioni': 'Relazioni',
+    'specCoppia': 'Coppia',
+    'specGenitorialita': 'Genitorialità',
+    'specInfanzia': 'Infanzia / adolescenza',
+    'specAutostima': 'Autostima',
+    'specTrauma': 'Trauma',
+    'specLutto': 'Lutto',
+    'specSessualita': 'Sessualità',
+    'specDisturbiAlimentari': 'Disturbi alimentari',
+    'specDipendenze': 'Dipendenze',
+    'specNeurodivergenze': 'Neurodivergenze',
+  };
+}
+
+class _FilterResult {
+  final bool? gender;
+  final Set<String> specs;
+  const _FilterResult({required this.gender, required this.specs});
+}
+
+// ─────────────────────────────────────────────────────────────
+// FILTER BOTTOM SHEET
+// ─────────────────────────────────────────────────────────────
+
+class _FilterSheet extends StatefulWidget {
+  final bool? initialGender;
+  final Set<String> initialSpecs;
+  const _FilterSheet({required this.initialGender, required this.initialSpecs});
+
+  @override
+  State<_FilterSheet> createState() => _FilterSheetState();
+}
+
+class _FilterSheetState extends State<_FilterSheet> {
+  bool? _gender;
+  late Set<String> _specs;
+
+  @override
+  void initState() {
+    super.initState();
+    _gender = widget.initialGender;
+    _specs = Set.from(widget.initialSpecs);
+  }
+
+  int get _count => (_gender != null ? 1 : 0) + _specs.length;
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).viewInsets.bottom;
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomPad),
+          decoration: const BoxDecoration(
+            color: AppColors.glassBg,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border(top: BorderSide(color: AppColors.glassBorder)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.textTertiary.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
+
+              // Titolo
+              Row(children: [
+                const Icon(Icons.tune_rounded, size: 18, color: AppColors.textSecondary),
+                const SizedBox(width: 8),
+                const Text('Filtra psicologi',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const Spacer(),
+                if (_count > 0)
+                  TextButton(
+                    onPressed: () => setState(() { _gender = null; _specs.clear(); }),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      minimumSize: Size.zero,
+                    ),
+                    child: const Text('Azzera', style: TextStyle(fontSize: 13)),
+                  ),
+              ]),
+              const SizedBox(height: 16),
+
+              // Sezione Sesso
+              _SheetSection(
+                icon: Icons.person_outline_rounded,
+                label: 'Sesso',
+                child: Wrap(spacing: 8, children: [
+                  _ChoiceItem(label: 'Tutti', selected: _gender == null,
+                    onTap: () => setState(() => _gender = null)),
+                  _ChoiceItem(label: 'Uomo', icon: Icons.male_rounded,
+                    selected: _gender == true,
+                    onTap: () => setState(() => _gender = _gender == true ? null : true)),
+                  _ChoiceItem(label: 'Donna', icon: Icons.female_rounded,
+                    selected: _gender == false,
+                    onTap: () => setState(() => _gender = _gender == false ? null : false)),
+                ]),
+              ),
+              const SizedBox(height: 20),
+
+              // Sezione Specializzazioni
+              _SheetSection(
+                icon: Icons.psychology_outlined,
+                label: 'Aree di specializzazione',
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _PsychFilter.specLabels.entries.map((e) {
+                    final sel = _specs.contains(e.key);
+                    return FilterChip(
+                      label: Text(e.value),
+                      selected: sel,
+                      onSelected: (v) => setState(() {
+                        if (v) _specs.add(e.key); else _specs.remove(e.key);
+                      }),
+                      selectedColor: AppColors.primary.withOpacity(0.22),
+                      checkmarkColor: AppColors.primary,
+                      labelStyle: TextStyle(
+                        fontSize: 13,
+                        color: sel ? AppColors.primary : AppColors.textSecondary,
+                        fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                      side: BorderSide(
+                        color: sel ? AppColors.primary : AppColors.textTertiary.withOpacity(0.4),
+                      ),
+                      backgroundColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Bottone Applica
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context, _FilterResult(gender: _gender, specs: _specs)),
+                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                  child: Text(
+                    _count == 0 ? 'Mostra tutti' : 'Applica $_count filtri',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+}
+
+class _SheetSection extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Widget child;
+  const _SheetSection({required this.icon, required this.label, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(icon, size: 15, color: AppColors.textSecondary),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+      ]),
+      const SizedBox(height: 10),
+      child,
     ]);
+  }
+}
+
+class _ChoiceItem extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ChoiceItem({required this.label, this.icon, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.textTertiary.withOpacity(0.4),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (icon != null) ...[
+            Icon(icon, size: 15, color: selected ? AppColors.primary : AppColors.textSecondary),
+            const SizedBox(width: 5),
+          ],
+          Text(label, style: TextStyle(
+            fontSize: 13,
+            color: selected ? AppColors.primary : AppColors.textSecondary,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          )),
+        ]),
+      ),
+    );
   }
 }
 
@@ -903,7 +1291,7 @@ class _PsychSquareCard extends StatelessWidget {
       isScrollControlled: true,
       builder: (_) => _ReviewsSheet(
         psychologistId: psychId,
-        psychName: p['alboCode'] as String? ?? 'Psicologo',
+        psychName: _psychName(p),
       ),
     );
   }
@@ -949,7 +1337,7 @@ class _PsychSquareCard extends StatelessWidget {
                   Row(children: [
                     Expanded(
                       child: Text(
-                        'Albo: ${p['alboCode'] ?? '—'}',
+                        _psychName(p),
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -958,6 +1346,13 @@ class _PsychSquareCard extends StatelessWidget {
                     if (p['verified'] == true)
                       const Icon(Icons.verified_rounded, color: Colors.lightBlueAccent, size: 14),
                   ]),
+                  if (p['alboCode'] != null && (p['alboCode'] as String).isNotEmpty)
+                    Text(
+                      'Albo: ${p['alboCode']}',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   if (p['address'] != null && (p['address'] as String).isNotEmpty)
                     Text(
                       p['address'] as String,

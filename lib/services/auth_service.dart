@@ -1,9 +1,10 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
-  static const baseUrl = 'http://192.168.5.19:3000';
+  static final baseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
   static const _tokenKey = 'access_token';
 
   Future<String?> getToken() async {

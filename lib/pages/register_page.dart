@@ -33,6 +33,42 @@ class _RegisterPageState extends State<RegisterPage> {
   bool    _obscure = true;
   String? _error;
 
+  bool? _isMale;
+
+  final Map<String, bool> _specs = {
+    'specAnsia': false,
+    'specUmore': false,
+    'specStress': false,
+    'specRelazioni': false,
+    'specCoppia': false,
+    'specGenitorialita': false,
+    'specInfanzia': false,
+    'specAutostima': false,
+    'specTrauma': false,
+    'specLutto': false,
+    'specSessualita': false,
+    'specDisturbiAlimentari': false,
+    'specDipendenze': false,
+    'specNeurodivergenze': false,
+  };
+
+  static const Map<String, String> _specLabels = {
+    'specAnsia': 'Ansia',
+    'specUmore': 'Umore / depressione',
+    'specStress': 'Stress / lavoro',
+    'specRelazioni': 'Relazioni',
+    'specCoppia': 'Coppia',
+    'specGenitorialita': 'Genitorialità',
+    'specInfanzia': 'Infanzia / adolescenza',
+    'specAutostima': 'Autostima',
+    'specTrauma': 'Trauma',
+    'specLutto': 'Lutto',
+    'specSessualita': 'Sessualità',
+    'specDisturbiAlimentari': 'Disturbi alimentari',
+    'specDipendenze': 'Dipendenze',
+    'specNeurodivergenze': 'Neurodivergenze',
+  };
+
   @override
   void dispose() {
     for (final c in [_firstNameController, _lastNameController, _emailController,
@@ -65,6 +101,8 @@ class _RegisterPageState extends State<RegisterPage> {
         if (_role == 'PSYCHOLOGIST' && _bioController.text.isNotEmpty) 'bio': _bioController.text.trim(),
         if (_role == 'PSYCHOLOGIST') 'address': _fullAddress,
         if (_role == 'PSYCHOLOGIST') 'phone': _phoneController.text.trim(),
+        if (_role == 'PSYCHOLOGIST' && _isMale != null) 'isMale': _isMale,
+        if (_role == 'PSYCHOLOGIST') ..._specs,
         if (imageUrl != null) 'profileImage': imageUrl,
       });
       if (!mounted) return;
@@ -201,6 +239,27 @@ class _RegisterPageState extends State<RegisterPage> {
                           textInputAction: TextInputAction.next,
                         ),
                         const SizedBox(height: 24),
+
+                        // Sesso
+                        _SectionLabel(label: 'Sesso', icon: Icons.person_outline_rounded),
+                        const SizedBox(height: 12),
+                        Row(children: [
+                          _GenderChip(
+                            label: 'Uomo',
+                            icon: Icons.male_rounded,
+                            selected: _isMale == true,
+                            onTap: () => setState(() => _isMale = true),
+                          ),
+                          const SizedBox(width: 10),
+                          _GenderChip(
+                            label: 'Donna',
+                            icon: Icons.female_rounded,
+                            selected: _isMale == false,
+                            onTap: () => setState(() => _isMale = false),
+                          ),
+                        ]),
+                        const SizedBox(height: 24),
+
                         _SectionLabel(label: 'Indirizzo studio', icon: Icons.location_on_outlined),
                         const SizedBox(height: 4),
                         Text('Dove intendi effettuare le sedute', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textTertiary)),
@@ -262,6 +321,46 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                       ]),
                     ),
+
+                    // Aree di specializzazione
+                    const SizedBox(height: 16),
+                    GlassCard(
+                      radius: 20,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        _SectionLabel(label: 'Aree di specializzazione', icon: Icons.psychology_outlined),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Seleziona le aree in cui lavori (facoltativo)',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textTertiary),
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _specLabels.entries.map((e) {
+                            final selected = _specs[e.key] ?? false;
+                            return FilterChip(
+                              label: Text(e.value),
+                              selected: selected,
+                              onSelected: (v) => setState(() => _specs[e.key] = v),
+                              selectedColor: AppColors.primary.withOpacity(0.25),
+                              checkmarkColor: AppColors.primary,
+                              labelStyle: TextStyle(
+                                fontSize: 13,
+                                color: selected ? AppColors.primary : AppColors.textSecondary,
+                                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                              side: BorderSide(
+                                color: selected ? AppColors.primary : AppColors.textTertiary.withOpacity(0.4),
+                              ),
+                              backgroundColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            );
+                          }).toList(),
+                        ),
+                      ]),
+                    ),
                   ],
 
                   const SizedBox(height: 24),
@@ -286,6 +385,51 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _GenderChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _GenderChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.textTertiary.withOpacity(0.4),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 20, color: selected ? AppColors.primary : AppColors.textSecondary),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              color: selected ? AppColors.primary : AppColors.textSecondary,
+            ),
+          ),
+        ]),
       ),
     );
   }

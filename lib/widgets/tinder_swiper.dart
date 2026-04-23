@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
@@ -123,7 +122,8 @@ class _TinderSwiperState extends State<TinderSwiper>
 
     if (remaining <= 0) return const _EmptyState();
 
-    return Stack(
+    return SizedBox.expand(
+      child: Stack(
       alignment: Alignment.center,
       children: [
         if (remaining > 1)
@@ -184,7 +184,7 @@ class _TinderSwiperState extends State<TinderSwiper>
           ),
         ),
       ],
-    );
+    ));
   }
 
   Widget _buildCard(Map<String, dynamic> item, {double scale = 1.0, double offsetY = 0}) {
@@ -217,20 +217,18 @@ class _AnswerCard extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
+      child: Container(
           width: MediaQuery.of(context).size.width - 32,
-          constraints: const BoxConstraints(maxHeight: 500),
+          height: double.infinity,
           decoration: BoxDecoration(
             color: dimmed
-                ? AppColors.glassBg.withOpacity(0.5)
-                : AppColors.glassBg,
+                ? AppColors.surface.withOpacity(0.7)
+                : AppColors.surface,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: AppColors.glassBorder),
             boxShadow: dimmed
                 ? []
-                : [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 24, offset: const Offset(0, 8))],
+                : [BoxShadow(color: Colors.black.withOpacity(0.6), blurRadius: 24, offset: const Offset(0, 8))],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -239,7 +237,6 @@ class _AnswerCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: const BoxDecoration(
-                  color: AppColors.glassBg,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                   border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
                 ),
@@ -357,7 +354,6 @@ class _AnswerCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }
