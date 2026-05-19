@@ -5,18 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class AuthService {
-  // ↓ Cambia questo IP se cambi rete WiFi (ipconfig su Windows, ifconfig su Mac/Linux)
-  // Usa 'http://10.0.2.2:3000' se stai usando l'emulatore Android invece del dispositivo fisico
-  static const _backendUrl = 'http://192.168.1.184:3000';
+  static const _productionUrl = 'https://pronto-psicologo-backend-production.up.railway.app';
+  // Per sviluppo locale: 'http://192.168.1.184:3000' oppure 'http://10.0.2.2:3000' per emulatore
+  static const _localUrl = 'http://192.168.1.184:3000';
 
-  static String get baseUrl {
-    if (kIsWeb) {
-      // Usa lo stesso host da cui è servita la web app, porta 3000
-      // Funziona sia da localhost (PC) che da IP locale (iPhone/altri dispositivi)
-      return 'http://${Uri.base.host}:3000';
-    }
-    return _backendUrl; // dispositivo Android fisico
-  }
+  static String get baseUrl => _productionUrl;
   static const _tokenKey = 'access_token';
 
   Future<String?> getToken() async {
