@@ -9,6 +9,23 @@ class ApiService {
 
   final AuthService _auth = AuthService();
 
+  /// Normalizza un URL immagine salvato nel DB sostituendo host/porta con
+  /// quelli correnti (fix per URL scritti con IP diverso dalla sessione corrente).
+  static String? resolveUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('/')) return '${AuthService.baseUrl}$url';
+    try {
+      final uri = Uri.parse(url);
+      final base = Uri.parse(AuthService.baseUrl);
+      return uri.replace(scheme: base.scheme, host: base.host, port: base.port).toString();
+    } catch (_) {
+      return url;
+    }
+  }
+
+  static String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
   Future<Map<String, String>> _authHeaders() async {
     final token = await _auth.getToken();
     return {
@@ -65,6 +82,18 @@ class ApiService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> aiRankPsychologists(String query) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/psychologists/ai-rank'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'query': query}),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Errore nella ricerca AI');
+    }
+    return (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  }
+
   Future<void> updatePsychologist(String id, Map<String, dynamic> data) async {
     final headers = await _authHeaders();
     final response = await http.put(
@@ -112,8 +141,7 @@ class ApiService {
     }
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final relativePath = body['url'] as String;
-    return '$baseUrl$relativePath';
+    return body['url'] as String; // path relativo: /uploads/filename.jpg
   }
 
   // ── RISPOSTE ──────────────────────────────────────────────
@@ -266,6 +294,66 @@ class ApiService {
     }
   }
 
+  // ── APPUNTAMENTI ──────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getAgenda() async {
+    final headers = await _authHeaders();
+    final response = await http.get(Uri.parse('$baseUrl/appointments/agenda'), headers: headers);
+    if (response.statusCode != 200) throw Exception('Errore nel caricamento agenda');
+    return (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> getMyAppointments() async {
+    final headers = await _authHeaders();
+    final response = await http.get(Uri.parse('$baseUrl/appointments/mine'), headers: headers);
+    if (response.statusCode != 200) throw Exception('Errore nel caricamento appuntamenti');
+    return (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createAppointment({
+    required String title,
+    String? notes,
+    required DateTime startTime,
+    required DateTime endTime,
+    bool isExternal = false,
+    String? externalClientName,
+    String? userId,
+  }) async {
+    final headers = await _authHeaders();
+    final body = <String, dynamic>{
+      'title': title,
+      'startTime': startTime.toUtc().toIso8601String(),
+      'endTime': endTime.toUtc().toIso8601String(),
+      'isExternal': isExternal,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+      if (externalClientName != null && externalClientName.isNotEmpty) 'externalClientName': externalClientName,
+      if (userId != null && userId.isNotEmpty) 'userId': userId,
+    };
+    final response = await http.post(
+      Uri.parse('$baseUrl/appointments'),
+      headers: headers,
+      body: jsonEncode(body),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Errore nella creazione dell\'appuntamento');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<void> updateAppointmentStatus(String id, String status) async {
+    final headers = await _authHeaders();
+    await http.patch(
+      Uri.parse('$baseUrl/appointments/$id'),
+      headers: headers,
+      body: jsonEncode({'status': status}),
+    );
+  }
+
+  Future<void> deleteAppointment(String id) async {
+    final headers = await _authHeaders();
+    await http.delete(Uri.parse('$baseUrl/appointments/$id'), headers: headers);
+  }
+
   // ── ADMIN ─────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> getAdminSettings() async {
@@ -324,5 +412,85 @@ class ApiService {
     final response = await http.get(Uri.parse('$baseUrl/admin/answers'), headers: headers);
     if (response.statusCode != 200) throw Exception('Errore');
     return (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  // ── POST PSICOLOGO ────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getPostsByPsychologist(String psychologistId) async {
+    final response = await http.get(Uri.parse('$baseUrl/posts/psychologist/$psychologistId'));
+    if (response.statusCode != 200) throw Exception('Errore nel caricamento dei post');
+    return (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createPost({required String content, String? imageUrl}) async {
+    final headers = await _authHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/posts'),
+      headers: headers,
+      body: jsonEncode({
+        'content': content,
+        if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+      }),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Errore nella pubblicazione del post');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<void> deletePost(String id) async {
+    final headers = await _authHeaders();
+    final response = await http.delete(Uri.parse('$baseUrl/posts/$id'), headers: headers);
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Errore nell\'eliminazione del post');
+    }
+  }
+
+  // ── SLOT AGENDA PUBBLICA ──────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getPublicSlots(
+    String psychologistId,
+    DateTime date, {
+    DateTime? endDate,
+  }) async {
+    var query = 'date=${_fmtDate(date)}';
+    if (endDate != null) query += '&endDate=${_fmtDate(endDate)}';
+    final response = await http.get(
+      Uri.parse('$baseUrl/appointments/public/$psychologistId?$query'),
+    );
+    if (response.statusCode != 200) throw Exception('Errore nel caricamento degli slot');
+    return (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> requestSlot({
+    required String psychologistId,
+    required DateTime startTime,
+    String? notes,
+  }) async {
+    final headers = await _authHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/appointments/request'),
+      headers: headers,
+      body: jsonEncode({
+        'psychologistId': psychologistId,
+        'startTime': startTime.toUtc().toIso8601String(),
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      }),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? 'Errore nella richiesta dello slot');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<void> acceptAppointment(String id) async {
+    final headers = await _authHeaders();
+    await http.patch(Uri.parse('$baseUrl/appointments/$id/accept'), headers: headers);
+  }
+
+  Future<void> rejectAppointment(String id) async {
+    final headers = await _authHeaders();
+    await http.patch(Uri.parse('$baseUrl/appointments/$id/reject'), headers: headers);
   }
 }

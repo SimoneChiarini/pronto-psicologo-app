@@ -21,10 +21,6 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passwordController   = TextEditingController();
   final _alboController       = TextEditingController();
   final _bioController        = TextEditingController();
-  final _viaController        = TextEditingController();
-  final _civController        = TextEditingController();
-  final _capController        = TextEditingController();
-  final _provinciaController  = TextEditingController();
   final _phoneController      = TextEditingController();
 
   String  _role = 'USER';
@@ -34,6 +30,9 @@ class _RegisterPageState extends State<RegisterPage> {
   String? _error;
 
   bool? _isMale;
+  bool  _isOnlineOnly      = false;
+  bool  _isPsychotherapist = false;
+  final List<_AddressFields> _addresses = [_AddressFields()];
 
   final Map<String, bool> _specs = {
     'specAnsia': false,
@@ -52,45 +51,38 @@ class _RegisterPageState extends State<RegisterPage> {
     'specNeurodivergenze': false,
   };
 
-  static const Map<String, String> _specLabels = {
-    'specAnsia': 'Ansia',
-    'specUmore': 'Umore / depressione',
-    'specStress': 'Stress / lavoro',
-    'specRelazioni': 'Relazioni',
-    'specCoppia': 'Coppia',
-    'specGenitorialita': 'Genitorialità',
-    'specInfanzia': 'Infanzia / adolescenza',
-    'specAutostima': 'Autostima',
-    'specTrauma': 'Trauma',
-    'specLutto': 'Lutto',
-    'specSessualita': 'Sessualità',
-    'specDisturbiAlimentari': 'Disturbi alimentari',
-    'specDipendenze': 'Dipendenze',
-    'specNeurodivergenze': 'Neurodivergenze',
+  static Map<String, String> get _specLabels => {
+    for (final cat in kSpecCategories)
+      for (final e in cat.specs.entries) e.key: e.value,
   };
 
   @override
   void dispose() {
     for (final c in [_firstNameController, _lastNameController, _emailController,
-      _passwordController, _alboController, _bioController, _viaController,
-      _civController, _capController, _provinciaController, _phoneController]) {
+      _passwordController, _alboController, _bioController, _phoneController]) {
       c.dispose();
     }
+    for (final a in _addresses) a.dispose();
     super.dispose();
   }
 
-  String get _fullAddress =>
-      '${_viaController.text.trim()} ${_civController.text.trim()}, '
-      '${_capController.text.trim()} ${_provinciaController.text.trim()}';
-
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_role == 'PSYCHOLOGIST' && !_isOnlineOnly) {
+      if (_addresses.isEmpty || _addresses.first.viaCtrl.text.trim().isEmpty) {
+        setState(() => _error = 'Inserisci almeno un indirizzo studio');
+        return;
+      }
+    }
     setState(() { _loading = true; _error = null; });
     try {
       String? imageUrl;
       if (_selectedImage != null) {
         imageUrl = await ApiService().uploadImage(_selectedImage!);
       }
+      final addresses = (_role == 'PSYCHOLOGIST' && !_isOnlineOnly)
+          ? _addresses.map((a) => a.fullAddress).where((s) => s.trim().length > 5).toList()
+          : <String>[];
       await AuthService().register({
         'firstName': _firstNameController.text.trim(),
         'lastName':  _lastNameController.text.trim(),
@@ -99,7 +91,9 @@ class _RegisterPageState extends State<RegisterPage> {
         'role':      _role,
         if (_role == 'PSYCHOLOGIST') 'alboCode': _alboController.text.trim(),
         if (_role == 'PSYCHOLOGIST' && _bioController.text.isNotEmpty) 'bio': _bioController.text.trim(),
-        if (_role == 'PSYCHOLOGIST') 'address': _fullAddress,
+        if (_role == 'PSYCHOLOGIST') 'isOnlineOnly': _isOnlineOnly,
+        if (_role == 'PSYCHOLOGIST') 'isPsychotherapist': _isPsychotherapist,
+        if (_role == 'PSYCHOLOGIST') 'addresses': addresses,
         if (_role == 'PSYCHOLOGIST') 'phone': _phoneController.text.trim(),
         if (_role == 'PSYCHOLOGIST' && _isMale != null) 'isMale': _isMale,
         if (_role == 'PSYCHOLOGIST') ..._specs,
@@ -260,46 +254,106 @@ class _RegisterPageState extends State<RegisterPage> {
                         ]),
                         const SizedBox(height: 24),
 
-                        _SectionLabel(label: 'Indirizzo studio', icon: Icons.location_on_outlined),
-                        const SizedBox(height: 4),
-                        Text('Dove intendi effettuare le sedute', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textTertiary)),
-                        const SizedBox(height: 14),
-                        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Expanded(flex: 3, child: TextFormField(
-                            controller: _viaController,
-                            decoration: const InputDecoration(labelText: 'Via / Piazza', hintText: 'Es. Via Roma'),
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.next,
-                            validator: (v) => (v == null || v.isEmpty) ? 'Obbligatorio' : null,
-                          )),
-                          const SizedBox(width: 10),
-                          Expanded(flex: 1, child: TextFormField(
-                            controller: _civController,
-                            decoration: const InputDecoration(labelText: 'N°', hintText: '1'),
-                            textInputAction: TextInputAction.next,
-                            validator: (v) => (v == null || v.isEmpty) ? 'N/A' : null,
-                          )),
-                        ]),
+                        // Qualifica
+                        _SectionLabel(label: 'Qualifica', icon: Icons.workspace_premium_outlined),
                         const SizedBox(height: 12),
-                        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Expanded(flex: 2, child: TextFormField(
-                            controller: _capController,
-                            decoration: const InputDecoration(labelText: 'CAP', hintText: '59100'),
-                            keyboardType: TextInputType.number,
-                            maxLength: 5,
-                            textInputAction: TextInputAction.next,
-                            validator: (v) => (v == null || v.length != 5) ? 'CAP non valido' : null,
-                          )),
-                          const SizedBox(width: 10),
-                          Expanded(flex: 3, child: TextFormField(
-                            controller: _provinciaController,
-                            decoration: const InputDecoration(labelText: 'Città / Provincia', hintText: 'Es. Prato'),
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.next,
-                            validator: (v) => (v == null || v.isEmpty) ? 'Obbligatorio' : null,
+                        Row(children: [
+                          Switch(
+                            value: _isPsychotherapist,
+                            onChanged: (v) => setState(() => _isPsychotherapist = v),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('Psicoterapeuta', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                        ]),
+                        const SizedBox(height: 24),
+
+                        // Modalità lavoro
+                        _SectionLabel(label: 'Modalità', icon: Icons.laptop_outlined),
+                        const SizedBox(height: 12),
+                        Row(children: [
+                          Switch(
+                            value: _isOnlineOnly,
+                            onChanged: (v) => setState(() => _isOnlineOnly = v),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(
+                            _isOnlineOnly ? 'Solo online' : 'In presenza (+ eventualmente online)',
+                            style: const TextStyle(fontSize: 13),
                           )),
                         ]),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 20),
+
+                        // Indirizzi studio (visibili solo se non online)
+                        if (!_isOnlineOnly) ...[
+                          _SectionLabel(label: 'Indirizzi studio', icon: Icons.location_on_outlined),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Puoi aggiungere più sedi',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textTertiary),
+                          ),
+                          const SizedBox(height: 14),
+                          for (int i = 0; i < _addresses.length; i++) ...[
+                            if (_addresses.length > 1) Row(children: [
+                              Text(
+                                'Studio ${i + 1}',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                              ),
+                              const Spacer(),
+                              if (i > 0) TextButton(
+                                onPressed: () => setState(() {
+                                  _addresses[i].dispose();
+                                  _addresses.removeAt(i);
+                                }),
+                                style: TextButton.styleFrom(foregroundColor: AppColors.error, padding: EdgeInsets.zero),
+                                child: const Text('Rimuovi', style: TextStyle(fontSize: 12)),
+                              ),
+                            ]),
+                            if (_addresses.length > 1) const SizedBox(height: 6),
+                            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Expanded(flex: 3, child: TextField(
+                                controller: _addresses[i].viaCtrl,
+                                decoration: const InputDecoration(labelText: 'Via / Piazza', hintText: 'Es. Via Roma'),
+                                textCapitalization: TextCapitalization.words,
+                                textInputAction: TextInputAction.next,
+                              )),
+                              const SizedBox(width: 10),
+                              Expanded(flex: 1, child: TextField(
+                                controller: _addresses[i].civCtrl,
+                                decoration: const InputDecoration(labelText: 'N°', hintText: '1'),
+                                textInputAction: TextInputAction.next,
+                              )),
+                            ]),
+                            const SizedBox(height: 10),
+                            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Expanded(flex: 2, child: TextField(
+                                controller: _addresses[i].capCtrl,
+                                decoration: const InputDecoration(labelText: 'CAP', hintText: '59100'),
+                                keyboardType: TextInputType.number,
+                                maxLength: 5,
+                                textInputAction: TextInputAction.next,
+                              )),
+                              const SizedBox(width: 10),
+                              Expanded(flex: 3, child: TextField(
+                                controller: _addresses[i].provCtrl,
+                                decoration: const InputDecoration(labelText: 'Città / Provincia', hintText: 'Es. Prato'),
+                                textCapitalization: TextCapitalization.words,
+                                textInputAction: TextInputAction.next,
+                              )),
+                            ]),
+                            if (i < _addresses.length - 1) const SizedBox(height: 16),
+                          ],
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () => setState(() => _addresses.add(_AddressFields())),
+                              icon: const Icon(Icons.add_rounded, size: 16),
+                              label: const Text('Aggiungi studio', style: TextStyle(fontSize: 13)),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+
                         TextFormField(
                           controller: _phoneController,
                           decoration: const InputDecoration(
@@ -322,7 +376,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       ]),
                     ),
 
-                    // Aree di specializzazione
+                    // Aree di specializzazione (per categoria)
                     const SizedBox(height: 16),
                     GlassCard(
                       radius: 20,
@@ -334,31 +388,40 @@ class _RegisterPageState extends State<RegisterPage> {
                           'Seleziona le aree in cui lavori (facoltativo)',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textTertiary),
                         ),
-                        const SizedBox(height: 14),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: _specLabels.entries.map((e) {
-                            final selected = _specs[e.key] ?? false;
-                            return FilterChip(
-                              label: Text(e.value),
-                              selected: selected,
-                              onSelected: (v) => setState(() => _specs[e.key] = v),
-                              selectedColor: AppColors.bgInverse,
-                              checkmarkColor: AppColors.textInverse,
-                              labelStyle: TextStyle(
-                                fontSize: 12,
-                                color: selected ? AppColors.textInverse : AppColors.textSecondary,
-                                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                              ),
-                              side: BorderSide(
-                                color: selected ? AppColors.bgInverse : AppColors.glassBorder,
-                              ),
-                              backgroundColor: AppColors.bg,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                            );
-                          }).toList(),
-                        ),
+                        const SizedBox(height: 16),
+                        ...kSpecCategories.map((cat) => Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Row(children: [
+                              Icon(cat.icon, size: 13, color: AppColors.textSecondary),
+                              const SizedBox(width: 5),
+                              Text(cat.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                            ]),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: cat.specs.entries.map((e) {
+                                final selected = _specs[e.key] ?? false;
+                                return FilterChip(
+                                  label: Text(e.value),
+                                  selected: selected,
+                                  onSelected: (v) => setState(() => _specs[e.key] = v),
+                                  selectedColor: AppColors.bgInverse,
+                                  checkmarkColor: AppColors.textInverse,
+                                  labelStyle: TextStyle(
+                                    fontSize: 12,
+                                    color: selected ? AppColors.textInverse : AppColors.textSecondary,
+                                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                                  ),
+                                  side: BorderSide(color: selected ? AppColors.bgInverse : AppColors.glassBorder),
+                                  backgroundColor: AppColors.bg,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                                );
+                              }).toList(),
+                            ),
+                          ]),
+                        )),
                       ]),
                     ),
                   ],
@@ -446,5 +509,21 @@ class _SectionLabel extends StatelessWidget {
       const SizedBox(width: 6),
       Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary)),
     ]);
+  }
+}
+
+class _AddressFields {
+  final viaCtrl  = TextEditingController();
+  final civCtrl  = TextEditingController();
+  final capCtrl  = TextEditingController();
+  final provCtrl = TextEditingController();
+
+  String get fullAddress =>
+      '${viaCtrl.text.trim()} ${civCtrl.text.trim()}, '
+      '${capCtrl.text.trim()} ${provCtrl.text.trim()}';
+
+  void dispose() {
+    viaCtrl.dispose(); civCtrl.dispose();
+    capCtrl.dispose(); provCtrl.dispose();
   }
 }

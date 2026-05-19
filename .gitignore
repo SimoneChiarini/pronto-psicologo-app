@@ -17,3 +17,9 @@ build/
 
 # Generated files
 *.log
+
+# Firebase / Google config (non committare)
+google-services.json
+GoogleService-Info.plist
+lib/firebase_options.dart
+web/firebase-messaging-sw.js

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/image_picker_field.dart';
 import '../widgets/tinder_swiper.dart';
+import 'psychologist_profile_page.dart';
 
 String _psychName(Map<String, dynamic> psych) {
   final u = psych['user'] as Map<String, dynamic>? ?? {};
@@ -117,8 +119,8 @@ class _GlassNavRail extends StatelessWidget {
           color: AppColors.textInverse, fontSize: 11, fontWeight: FontWeight.w600,
         ),
         unselectedLabelTextStyle: const TextStyle(color: Color(0xFF777777), fontSize: 11),
-        labelType: isWide ? NavigationRailLabelType.all : NavigationRailLabelType.none,
-        minWidth: isWide ? 130 : 56,
+        labelType: NavigationRailLabelType.selected,
+        minWidth: isWide ? 130 : 72,
         leading: leading,
         trailing: trailing,
         destinations: destinations,
@@ -196,7 +198,8 @@ class _UserHomeState extends State<_UserHome> {
       const _AskQuestionTab(),
       _MyAnswersTab(userId: userId),
       _ConversationsTab(userId: userId, role: 'USER'),
-      const _PsychologistsListTab(),
+      const _PsychologistsBrowseTab(),
+      const _AppuntamentiTab(),
     ];
 
     return Scaffold(
@@ -230,6 +233,11 @@ class _UserHomeState extends State<_UserHome> {
                     icon: Icon(Icons.people_outline_rounded),
                     selectedIcon: Icon(Icons.people_rounded),
                     label: Text('Psicologi'),
+                  ),
+                  NavigationRailDestination(
+                    icon: Icon(Icons.event_outlined),
+                    selectedIcon: Icon(Icons.event_rounded),
+                    label: Text('Appuntamenti'),
                   ),
                 ],
               ),
@@ -629,7 +637,7 @@ class _ConversationsTabState extends State<_ConversationsTab> with AutomaticKeep
           if (widget.role == 'USER') {
             final psych = conv['Psychologist'] as Map<String, dynamic>? ?? {};
             title = _psychName(psych);
-            imageUrl = psych['profileImage'] as String?;
+            imageUrl = ApiService.resolveUrl(psych['profileImage'] as String?);
             final albo = psych['alboCode'] as String?;
             if (psych['verified'] == true) {
               subtitle = albo != null && albo.isNotEmpty ? '✓ Verificato · Albo: $albo' : '✓ Verificato';
@@ -795,8 +803,37 @@ class _AskQuestionTabState extends State<_AskQuestionTab> {
 // TAB: LISTA PSICOLOGI (GRID QUADRATA)
 // ─────────────────────────────────────────────────────────────
 
+// ─── wrapper: lista psicologi + profilo inline ────────────────
+class _PsychologistsBrowseTab extends StatefulWidget {
+  const _PsychologistsBrowseTab();
+  @override
+  State<_PsychologistsBrowseTab> createState() => _PsychologistsBrowseTabState();
+}
+
+class _PsychologistsBrowseTabState extends State<_PsychologistsBrowseTab> {
+  String? _selectedId;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_selectedId != null) {
+      return PsychologistProfilePage(
+        key: ValueKey(_selectedId),
+        psychologistId: _selectedId!,
+        role: 'USER',
+        isOwnProfile: false,
+        asEmbedded: true,
+        onBack: () => setState(() => _selectedId = null),
+      );
+    }
+    return _PsychologistsListTab(
+      onSelectPsych: (id) => setState(() => _selectedId = id),
+    );
+  }
+}
+
 class _PsychologistsListTab extends StatefulWidget {
-  const _PsychologistsListTab();
+  final void Function(String id)? onSelectPsych;
+  const _PsychologistsListTab({this.onSelectPsych});
   @override
   State<_PsychologistsListTab> createState() => _PsychologistsListTabState();
 }
@@ -809,18 +846,47 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
   String _query = '';
 
   // Filtri attivi
-  bool? _filterGender;          // null=tutti, true=uomo, false=donna
+  bool? _filterGender;
   final Set<String> _filterSpecs = {};
+
+  // AI search
+  List<Map<String, dynamic>>? _aiRanked;
+  bool _aiLoading = false;
+  bool _aiFailed = false;
+  Timer? _aiDebounce;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _searchCtrl.addListener(() => setState(() => _query = _searchCtrl.text.toLowerCase()));
+    _searchCtrl.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    final q = _searchCtrl.text.trim();
+    setState(() { _query = q.toLowerCase(); });
+    _aiDebounce?.cancel();
+    if (q.isEmpty) {
+      setState(() { _aiRanked = null; _aiLoading = false; _aiFailed = false; });
+      return;
+    }
+    setState(() { _aiLoading = true; _aiFailed = false; });
+    _aiDebounce = Timer(const Duration(milliseconds: 700), () async {
+      try {
+        final ranked = await ApiService().aiRankPsychologists(q);
+        if (mounted) setState(() { _aiRanked = ranked; _aiLoading = false; });
+      } catch (_) {
+        if (mounted) setState(() { _aiRanked = null; _aiLoading = false; _aiFailed = true; });
+      }
+    });
   }
 
   @override
-  void dispose() { _searchCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _aiDebounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
@@ -838,11 +904,17 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
   List<Map<String, dynamic>> get _filtered {
     var list = _psychologists ?? [];
     if (_query.isNotEmpty) {
-      list = list.where((p) =>
-        (p['alboCode'] as String? ?? '').toLowerCase().contains(_query) ||
-        (p['bio'] as String? ?? '').toLowerCase().contains(_query) ||
-        (p['address'] as String? ?? '').toLowerCase().contains(_query),
-      ).toList();
+      list = list.where((p) {
+        final albo  = (p['alboCode'] as String? ?? '').toLowerCase();
+        final bio   = (p['bio'] as String? ?? '').toLowerCase();
+        final user  = p['user'] as Map? ?? {};
+        final name  = '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'.toLowerCase();
+        final addrs = (p['addresses'] as List? ?? [])
+            .map((a) => ((a as Map)['address'] as String? ?? '').toLowerCase())
+            .join(' ');
+        return albo.contains(_query) || bio.contains(_query) ||
+               name.contains(_query) || addrs.contains(_query);
+      }).toList();
     }
     if (_filterGender != null) {
       list = list.where((p) => p['isMale'] == _filterGender).toList();
@@ -851,6 +923,23 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
       list = list.where((p) => _filterSpecs.every((s) => p[s] == true)).toList();
     }
     return list;
+  }
+
+  List<Map<String, dynamic>> get _displayList {
+    if (_aiRanked != null) {
+      var list = List<Map<String, dynamic>>.from(_aiRanked!);
+      if (_filterGender != null) list = list.where((p) => p['isMale'] == _filterGender).toList();
+      if (_filterSpecs.isNotEmpty) list = list.where((p) => _filterSpecs.every((s) => p[s] == true)).toList();
+      return list;
+    }
+    // When query is active (AI loading or failed), show all psychologists — don't do literal text match
+    if (_query.isNotEmpty) {
+      var list = List<Map<String, dynamic>>.from(_psychologists ?? []);
+      if (_filterGender != null) list = list.where((p) => p['isMale'] == _filterGender).toList();
+      if (_filterSpecs.isNotEmpty) list = list.where((p) => _filterSpecs.every((s) => p[s] == true)).toList();
+      return list;
+    }
+    return _filtered;
   }
 
   Future<void> _openFilters() async {
@@ -881,7 +970,7 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) return _errorState(_error!, _load);
-    final filtered = _filtered;
+    final display = _displayList;
     final width = MediaQuery.of(context).size.width;
     final cols = _crossAxisCount(width);
     final activeCount = _activeFilterCount;
@@ -892,7 +981,7 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
           child: Row(children: [
-            Expanded(child: _searchBar(_searchCtrl, 'Cerca per albo, bio, indirizzo...')),
+            Expanded(child: _searchBar(_searchCtrl, 'Descrivi cosa cerchi (es. gestisco ansia lavoro)...')),
             const SizedBox(width: 8),
             // Bottone Filtra con badge
             GestureDetector(
@@ -969,8 +1058,61 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
             ),
           ),
 
+        // Banner AI
+        if (_aiLoading)
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.glassBorder),
+            ),
+            child: Row(children: [
+              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textSecondary)),
+              const SizedBox(width: 10),
+              const Text('Ricerca AI in corso...', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ]),
+          ),
+        if (_aiRanked != null && !_aiLoading)
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.success.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.success.withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.auto_awesome_rounded, size: 14, color: AppColors.success),
+              const SizedBox(width: 8),
+              const Expanded(child: Text(
+                'Psicologi ordinati per affinità con la tua ricerca',
+                style: TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w500),
+              )),
+            ]),
+          ),
+        if (_aiFailed && !_aiLoading)
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.error.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.error.withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.error),
+              const SizedBox(width: 8),
+              Expanded(child: Text(
+                'Ricerca AI non disponibile — risultati non filtrati',
+                style: TextStyle(fontSize: 12, color: AppColors.error),
+              )),
+            ]),
+          ),
+
         Expanded(
-          child: filtered.isEmpty
+          child: display.isEmpty
               ? _emptyState(icon: Icons.psychology_outlined, title: 'Nessuno psicologo trovato')
               : RefreshIndicator(
                   onRefresh: _load,
@@ -982,8 +1124,12 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
                       mainAxisSpacing: 12,
                       childAspectRatio: cols == 1 ? 0.85 : 0.75,
                     ),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, i) => _PsychSquareCard(p: filtered[i]),
+                    itemCount: display.length,
+                    itemBuilder: (context, i) => _PsychSquareCard(
+                      p: display[i],
+                      role: 'USER',
+                      onSelectPsych: widget.onSelectPsych,
+                    ),
                   ),
                 ),
         ),
@@ -1022,21 +1168,9 @@ class _ActiveChip extends StatelessWidget {
 
 // Dati condivisi filtri
 class _PsychFilter {
-  static const Map<String, String> specLabels = {
-    'specAnsia': 'Ansia',
-    'specUmore': 'Umore / depressione',
-    'specStress': 'Stress / lavoro',
-    'specRelazioni': 'Relazioni',
-    'specCoppia': 'Coppia',
-    'specGenitorialita': 'Genitorialità',
-    'specInfanzia': 'Infanzia / adolescenza',
-    'specAutostima': 'Autostima',
-    'specTrauma': 'Trauma',
-    'specLutto': 'Lutto',
-    'specSessualita': 'Sessualità',
-    'specDisturbiAlimentari': 'Disturbi alimentari',
-    'specDipendenze': 'Dipendenze',
-    'specNeurodivergenze': 'Neurodivergenze',
+  static Map<String, String> get specLabels => {
+    for (final cat in kSpecCategories)
+      for (final e in cat.specs.entries) e.key: e.value,
   };
 }
 
@@ -1084,7 +1218,8 @@ class _FilterSheetState extends State<_FilterSheet> {
             borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
             border: Border(top: BorderSide(color: AppColors.glassBorder)),
           ),
-          child: Column(
+          child: SingleChildScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1137,37 +1272,38 @@ class _FilterSheetState extends State<_FilterSheet> {
               ),
               const SizedBox(height: 20),
 
-              // Sezione Specializzazioni
-              _SheetSection(
-                icon: Icons.psychology_outlined,
-                label: 'Aree di specializzazione',
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _PsychFilter.specLabels.entries.map((e) {
-                    final sel = _specs.contains(e.key);
-                    return FilterChip(
-                      label: Text(e.value),
-                      selected: sel,
-                      onSelected: (v) => setState(() {
-                        if (v) _specs.add(e.key); else _specs.remove(e.key);
-                      }),
-                      selectedColor: AppColors.bgInverse,
-                      checkmarkColor: AppColors.textInverse,
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        color: sel ? AppColors.textInverse : AppColors.textSecondary,
-                        fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
-                      ),
-                      side: BorderSide(
-                        color: sel ? AppColors.bgInverse : AppColors.glassBorder,
-                      ),
-                      backgroundColor: AppColors.bg,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                    );
-                  }).toList(),
+              // Sezioni specializzazioni per categoria
+              ...kSpecCategories.map((cat) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _SheetSection(
+                  icon: cat.icon,
+                  label: cat.label,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: cat.specs.entries.map((e) {
+                      final sel = _specs.contains(e.key);
+                      return FilterChip(
+                        label: Text(e.value),
+                        selected: sel,
+                        onSelected: (v) => setState(() {
+                          if (v) _specs.add(e.key); else _specs.remove(e.key);
+                        }),
+                        selectedColor: AppColors.bgInverse,
+                        checkmarkColor: AppColors.textInverse,
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          color: sel ? AppColors.textInverse : AppColors.textSecondary,
+                          fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                        side: BorderSide(color: sel ? AppColors.bgInverse : AppColors.glassBorder),
+                        backgroundColor: AppColors.bg,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                      );
+                    }).toList(),
+                  ),
                 ),
-              ),
+              )),
               const SizedBox(height: 24),
 
               // Bottone Applica
@@ -1183,6 +1319,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                 ),
               ),
             ],
+          ),
           ),
         ),
     );
@@ -1252,7 +1389,9 @@ class _ChoiceItem extends StatelessWidget {
 
 class _PsychSquareCard extends StatelessWidget {
   final Map<String, dynamic> p;
-  const _PsychSquareCard({required this.p});
+  final String role;
+  final void Function(String id)? onSelectPsych;
+  const _PsychSquareCard({required this.p, required this.role, this.onSelectPsych});
 
   Future<void> _handleCall(BuildContext context, String phone) async {
     if (kIsWeb) {
@@ -1270,22 +1409,9 @@ class _PsychSquareCard extends StatelessWidget {
     }
   }
 
-  void _showReviews(BuildContext context) {
-    final psychId = p['id'] as String?;
-    if (psychId == null) return;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _ReviewsSheet(
-        psychologistId: psychId,
-        psychName: _psychName(p),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final imageUrl    = p['profileImage'] as String?;
+    final imageUrl    = ApiService.resolveUrl(p['profileImage'] as String?);
     final hasImage    = imageUrl != null && imageUrl.isNotEmpty;
     final avg         = p['avgRating'];
     final reviewCount = p['reviewCount'] as int? ?? 0;
@@ -1294,7 +1420,19 @@ class _PsychSquareCard extends StatelessWidget {
     return GlassCard(
       radius: 18,
       noPadding: true,
-      onTap: () => _showReviews(context),
+      onTap: () {
+        final psychId = p['id'] as String?;
+        if (psychId == null) return;
+        if (onSelectPsych != null) {
+          onSelectPsych!(psychId);
+        } else {
+          Navigator.of(context).pushNamed('/psychologist-profile', arguments: {
+            'psychologistId': psychId,
+            'role': role,
+            'isOwnProfile': false,
+          });
+        }
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1340,12 +1478,30 @@ class _PsychSquareCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  if (p['address'] != null && (p['address'] as String).isNotEmpty)
-                    Text(
-                      p['address'] as String,
-                      style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  Builder(builder: (_) {
+                    final addrs = p['addresses'] as List? ?? [];
+                    final firstAddr = addrs.isNotEmpty ? (addrs.first as Map)['address'] as String? : null;
+                    if (firstAddr == null || firstAddr.isEmpty) return const SizedBox.shrink();
+                    return Text(firstAddr, style: const TextStyle(fontSize: 11, color: AppColors.textTertiary), maxLines: 1, overflow: TextOverflow.ellipsis);
+                  }),
+                  if (p['aiReason'] != null && (p['aiReason'] as String).isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.auto_awesome_rounded, size: 10, color: AppColors.success),
+                        const SizedBox(width: 3),
+                        Flexible(child: Text(
+                          p['aiReason'] as String,
+                          style: const TextStyle(fontSize: 10, color: AppColors.success, fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )),
+                      ]),
                     ),
                   const Spacer(),
                   Row(children: [
@@ -1503,9 +1659,8 @@ class _MyProfileTab extends StatefulWidget {
 }
 
 class _MyProfileTabState extends State<_MyProfileTab> {
-  Map<String, dynamic>? _psychProfile;
+  String? _psychId;
   bool _loading = true;
-  String? _error;
 
   @override
   void initState() { super.initState(); _load(); }
@@ -1513,76 +1668,24 @@ class _MyProfileTabState extends State<_MyProfileTab> {
   Future<void> _load() async {
     try {
       final p = await ApiService().getPsychologistByUserId(widget.userId);
-      setState(() { _psychProfile = p; _loading = false; });
-    } catch (e) { setState(() { _error = e.toString(); _loading = false; }); }
-  }
-
-  void _openEdit() {
-    if (_psychProfile == null) return;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => _EditProfileSheet(
-        profile: _psychProfile!,
-        onSaved: () { Navigator.pop(ctx); setState(() => _loading = true); _load(); },
-      ),
-    );
+      if (!mounted) return;
+      setState(() { _psychId = p?['id'] as String?; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null || _psychProfile == null) {
-      return Center(child: Text(_error ?? 'Profilo non trovato',
-          style: const TextStyle(color: AppColors.error)));
+    if (_psychId == null) {
+      return const Center(child: Text('Profilo psicologo non trovato'));
     }
-    final p = _psychProfile!;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(children: [
-        const SizedBox(height: 8),
-        CircleAvatar(
-          radius: 52,
-          backgroundImage: (p['profileImage'] != null && (p['profileImage'] as String).isNotEmpty)
-              ? NetworkImage(p['profileImage'] as String)
-              : null,
-          backgroundColor: AppColors.glassBg,
-          child: (p['profileImage'] == null || (p['profileImage'] as String).isEmpty)
-              ? const Icon(Icons.person_rounded, size: 52, color: AppColors.textSecondary)
-              : null,
-        ),
-        const SizedBox(height: 8),
-        if (p['verified'] == true)
-          const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.verified_rounded, color: Colors.lightBlueAccent, size: 16),
-            SizedBox(width: 4),
-            Text('Verificato', style: TextStyle(color: Colors.lightBlueAccent, fontSize: 13)),
-          ]),
-        const SizedBox(height: 24),
-        GlassCard(
-          radius: 20,
-          padding: const EdgeInsets.all(20),
-          child: Column(children: [
-            _ProfileField(label: 'Codice Albo',  value: p['alboCode'] ?? '—'),
-            const Divider(height: 24),
-            _ProfileField(label: 'Bio',           value: p['bio'] ?? '—'),
-            const Divider(height: 24),
-            _ProfileField(label: 'Indirizzo',     value: p['address'] ?? '—'),
-            const Divider(height: 24),
-            _ProfileField(label: 'Telefono',      value: p['phone'] ?? '—'),
-            const Divider(height: 24),
-            _ProfileField(label: 'Stato',
-                value: p['verified'] == true ? 'Verificato' : 'In attesa di verifica'),
-          ]),
-        ),
-        const SizedBox(height: 20),
-        ElevatedButton.icon(
-          onPressed: _openEdit,
-          icon: const Icon(Icons.edit_rounded, size: 18),
-          label: const Text('Modifica profilo'),
-          style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-        ),
-      ]),
+    return PsychologistProfilePage(
+      psychologistId: _psychId!,
+      role: 'PSYCHOLOGIST',
+      isOwnProfile: true,
+      asEmbedded: true,
     );
   }
 }
@@ -2685,6 +2788,614 @@ class _SettingField extends StatelessWidget {
         helperStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAB: AGENDA (PSICOLOGO)
+// ─────────────────────────────────────────────────────────────
+
+class _AgendaTab extends StatefulWidget {
+  final String userId;
+  const _AgendaTab({required this.userId});
+  @override
+  State<_AgendaTab> createState() => _AgendaTabState();
+}
+
+class _AgendaTabState extends State<_AgendaTab> with AutomaticKeepAliveClientMixin {
+  List<Map<String, dynamic>>? _appointments;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final list = await ApiService().getAgenda();
+      setState(() { _appointments = list; _loading = false; });
+    } catch (e) {
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  Map<String, List<Map<String, dynamic>>> _groupByDate(List<Map<String, dynamic>> list) {
+    final map = <String, List<Map<String, dynamic>>>{};
+    for (final a in list) {
+      final dt = DateTime.parse(a['startTime'] as String).toLocal();
+      final key = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+      map.putIfAbsent(key, () => []).add(a);
+    }
+    return map;
+  }
+
+  String _timeRange(Map<String, dynamic> appt) {
+    final s = DateTime.parse(appt['startTime'] as String).toLocal();
+    final e = DateTime.parse(appt['endTime']   as String).toLocal();
+    return '${s.hour.toString().padLeft(2, '0')}:${s.minute.toString().padLeft(2, '0')} – ${e.hour.toString().padLeft(2, '0')}:${e.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _clientName(Map<String, dynamic> appt) {
+    if (appt['isExternal'] == true) return appt['externalClientName'] as String? ?? 'Cliente esterno';
+    final u = appt['user'] as Map<String, dynamic>?;
+    if (u == null) return 'Cliente app';
+    final fn = u['firstName'] as String? ?? '';
+    final ln = u['lastName']  as String? ?? '';
+    final full = '$fn $ln'.trim();
+    return full.isNotEmpty ? full : u['email'] as String? ?? 'Cliente';
+  }
+
+  Color _statusColor(String s) {
+    if (s == 'CANCELLED') return AppColors.error;
+    if (s == 'CONFIRMED') return AppColors.success;
+    return AppColors.star;
+  }
+
+  String _statusLabel(String s) {
+    if (s == 'CANCELLED') return 'Annullato';
+    if (s == 'CONFIRMED') return 'Confermato';
+    return 'In attesa';
+  }
+
+  Future<void> _cancelAppointment(String id) async {
+    try {
+      await ApiService().updateAppointmentStatus(id, 'CANCELLED');
+      _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
+    }
+  }
+
+  Future<void> _deleteAppointment(String id) async {
+    try {
+      await ApiService().deleteAppointment(id);
+      _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
+    }
+  }
+
+  void _showDetails(Map<String, dynamic> appt) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => _AppointmentDetailSheet(
+        appointment: appt,
+        clientName: _clientName(appt),
+        timeRange: _timeRange(appt),
+        statusLabel: _statusLabel(appt['status'] as String? ?? 'CONFIRMED'),
+        statusColor: _statusColor(appt['status'] as String? ?? 'CONFIRMED'),
+        onCancel: () { Navigator.pop(ctx); _cancelAppointment(appt['id'] as String); },
+        onDelete: () { Navigator.pop(ctx); _deleteAppointment(appt['id'] as String); },
+      ),
+    );
+  }
+
+  Future<void> _showCreateDialog() async {
+    await showDialog(
+      context: context,
+      builder: (_) => _CreateAppointmentDialog(onCreated: _load),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return _errorState(_error!, _load);
+
+    final grouped = _groupByDate(_appointments ?? []);
+    final sortedKeys = grouped.keys.toList()
+      ..sort((a, b) {
+        final pa = a.split('/'); final pb = b.split('/');
+        final da = DateTime(int.parse(pa[2]), int.parse(pa[1]), int.parse(pa[0]));
+        final db = DateTime(int.parse(pb[2]), int.parse(pb[1]), int.parse(pb[0]));
+        return da.compareTo(db);
+      });
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showCreateDialog,
+        backgroundColor: AppColors.bgInverse,
+        child: const Icon(Icons.add_rounded, color: AppColors.textInverse),
+      ),
+      body: (_appointments == null || _appointments!.isEmpty)
+          ? _emptyState(
+              icon: Icons.calendar_month_outlined,
+              title: 'Nessun appuntamento',
+              subtitle: 'Tocca + per aggiungere il primo appuntamento',
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+                itemCount: sortedKeys.length,
+                itemBuilder: (context, i) {
+                  final dateKey = sortedKeys[i];
+                  final items = grouped[dateKey]!;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
+                        child: Text(dateKey,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+                      ),
+                      ...items.map((appt) {
+                        final status = appt['status'] as String? ?? 'CONFIRMED';
+                        final color = _statusColor(status);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: GlassCard(
+                            noPadding: true,
+                            onTap: () => _showDetails(appt),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              leading: Container(
+                                width: 44, height: 44,
+                                decoration: BoxDecoration(
+                                  color: color.withAlpha(25),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  appt['isExternal'] == true ? Icons.person_outline_rounded : Icons.person_rounded,
+                                  color: color, size: 22,
+                                ),
+                              ),
+                              title: Text(appt['title'] as String? ?? '',
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                              subtitle: Text(
+                                '${_timeRange(appt)}  ·  ${_clientName(appt)}',
+                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              ),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: color.withAlpha(20),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(_statusLabel(status),
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                  );
+                },
+              ),
+            ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// DETAIL SHEET APPUNTAMENTO
+// ─────────────────────────────────────────────────────────────
+
+class _AppointmentDetailSheet extends StatelessWidget {
+  final Map<String, dynamic> appointment;
+  final String clientName;
+  final String timeRange;
+  final String statusLabel;
+  final Color statusColor;
+  final VoidCallback onCancel;
+  final VoidCallback onDelete;
+
+  const _AppointmentDetailSheet({
+    required this.appointment,
+    required this.clientName,
+    required this.timeRange,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.onCancel,
+    required this.onDelete,
+  });
+
+  Widget _row(IconData icon, String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(children: [
+      Icon(icon, size: 16, color: AppColors.textTertiary),
+      const SizedBox(width: 8),
+      Expanded(child: Text(text, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary))),
+    ]),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final notes  = appointment['notes']  as String?;
+    final status = appointment['status'] as String? ?? 'CONFIRMED';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(appointment['title'] as String? ?? '',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: statusColor.withAlpha(20), borderRadius: BorderRadius.circular(6)),
+            child: Text(statusLabel,
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.w600, fontSize: 12)),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        _row(Icons.access_time_rounded, timeRange),
+        _row(Icons.person_rounded, clientName),
+        if (notes != null && notes.isNotEmpty) _row(Icons.notes_rounded, notes),
+        const SizedBox(height: 20),
+        if (status != 'CANCELLED')
+          SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            icon: const Icon(Icons.cancel_outlined),
+            label: const Text('Annulla appuntamento'),
+            onPressed: onCancel,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: AppColors.error),
+            ),
+          )),
+        const SizedBox(height: 8),
+        SizedBox(width: double.infinity, child: OutlinedButton.icon(
+          icon: const Icon(Icons.delete_outline_rounded),
+          label: const Text('Elimina definitivamente'),
+          onPressed: onDelete,
+          style: OutlinedButton.styleFrom(foregroundColor: AppColors.textTertiary),
+        )),
+      ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// DIALOG NUOVO APPUNTAMENTO
+// ─────────────────────────────────────────────────────────────
+
+class _CreateAppointmentDialog extends StatefulWidget {
+  final VoidCallback onCreated;
+  const _CreateAppointmentDialog({required this.onCreated});
+  @override
+  State<_CreateAppointmentDialog> createState() => _CreateAppointmentDialogState();
+}
+
+class _CreateAppointmentDialogState extends State<_CreateAppointmentDialog> {
+  final _titleCtrl        = TextEditingController();
+  final _notesCtrl        = TextEditingController();
+  final _externalNameCtrl = TextEditingController();
+
+  DateTime   _date      = DateTime.now();
+  TimeOfDay  _startTime = TimeOfDay.now();
+  TimeOfDay  _endTime   = TimeOfDay(hour: (TimeOfDay.now().hour + 1) % 24, minute: TimeOfDay.now().minute);
+  bool       _isExternal = false;
+  String?    _selectedUserId;
+
+  List<Map<String, dynamic>>? _conversations;
+  bool   _loadingConvs = false;
+  bool   _saving       = false;
+  String? _error;
+
+  @override
+  void initState() { super.initState(); _loadConversations(); }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose(); _notesCtrl.dispose(); _externalNameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadConversations() async {
+    setState(() => _loadingConvs = true);
+    try {
+      final c = await ApiService().getMyConversations();
+      setState(() { _conversations = c; _loadingConvs = false; });
+    } catch (_) {
+      setState(() => _loadingConvs = false);
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+    );
+    if (d != null) setState(() => _date = d);
+  }
+
+  Future<void> _pickTime(bool isStart) async {
+    final t = await showTimePicker(
+      context: context,
+      initialTime: isStart ? _startTime : _endTime,
+    );
+    if (t != null) setState(() { if (isStart) _startTime = t; else _endTime = t; });
+  }
+
+  Future<void> _save() async {
+    if (_titleCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Il titolo è obbligatorio'); return;
+    }
+    if (!_isExternal && _selectedUserId == null) {
+      setState(() => _error = 'Seleziona un cliente o scegli "Esterno"'); return;
+    }
+    if (_isExternal && _externalNameCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Inserisci il nome del cliente esterno'); return;
+    }
+    final start = DateTime(_date.year, _date.month, _date.day, _startTime.hour, _startTime.minute);
+    final end   = DateTime(_date.year, _date.month, _date.day, _endTime.hour,   _endTime.minute);
+
+    setState(() { _saving = true; _error = null; });
+    try {
+      await ApiService().createAppointment(
+        title:              _titleCtrl.text.trim(),
+        notes:              _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        startTime:          start,
+        endTime:            end,
+        isExternal:         _isExternal,
+        externalClientName: _isExternal ? _externalNameCtrl.text.trim() : null,
+        userId:             !_isExternal ? _selectedUserId : null,
+      );
+      if (mounted) { Navigator.pop(context); widget.onCreated(); }
+    } catch (e) {
+      setState(() { _saving = false; _error = e.toString(); });
+    }
+  }
+
+  List<Map<String, dynamic>> _uniqueUsers() {
+    final seen = <String>{};
+    final users = <Map<String, dynamic>>[];
+    for (final conv in _conversations ?? []) {
+      final u   = conv['User'] as Map<String, dynamic>? ?? {};
+      final uid = u['id'] as String? ?? conv['userId'] as String? ?? '';
+      if (uid.isNotEmpty && seen.add(uid)) users.add({'id': uid, ...u});
+    }
+    return users;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateStr  = '${_date.day.toString().padLeft(2,'0')}/${_date.month.toString().padLeft(2,'0')}/${_date.year}';
+    final startStr = '${_startTime.hour.toString().padLeft(2,'0')}:${_startTime.minute.toString().padLeft(2,'0')}';
+    final endStr   = '${_endTime.hour.toString().padLeft(2,'0')}:${_endTime.minute.toString().padLeft(2,'0')}';
+
+    return AlertDialog(
+      title: const Text('Nuovo appuntamento'),
+      content: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TextField(
+            controller: _titleCtrl,
+            decoration: const InputDecoration(labelText: 'Titolo *', hintText: 'es. Seduta di consulenza'),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            icon: const Icon(Icons.calendar_today_rounded, size: 16),
+            label: Text(dateStr),
+            onPressed: _pickDate,
+          )),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: OutlinedButton.icon(
+              icon: const Icon(Icons.access_time_rounded, size: 16),
+              label: Text('Inizio  $startStr'),
+              onPressed: () => _pickTime(true),
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton.icon(
+              icon: const Icon(Icons.access_time_rounded, size: 16),
+              label: Text('Fine  $endStr'),
+              onPressed: () => _pickTime(false),
+            )),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            const Text('Cliente:', style: TextStyle(fontSize: 13)),
+            const SizedBox(width: 8),
+            ChoiceChip(
+              label: const Text('App'),
+              selected: !_isExternal,
+              onSelected: (_) => setState(() { _isExternal = false; }),
+            ),
+            const SizedBox(width: 4),
+            ChoiceChip(
+              label: const Text('Esterno'),
+              selected: _isExternal,
+              onSelected: (_) => setState(() { _isExternal = true; }),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          if (_isExternal)
+            TextField(
+              controller: _externalNameCtrl,
+              decoration: const InputDecoration(labelText: 'Nome cliente esterno *'),
+            )
+          else if (_loadingConvs)
+            const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+          else
+            _buildUserPicker(),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _notesCtrl,
+            maxLines: 2,
+            decoration: const InputDecoration(labelText: 'Note (opzionale)'),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 12)),
+          ],
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annulla')),
+        ElevatedButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Salva'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUserPicker() {
+    final users = _uniqueUsers();
+    if (users.isEmpty) {
+      return const Text('Nessun cliente nelle tue conversazioni',
+        style: TextStyle(fontSize: 12, color: AppColors.textTertiary));
+    }
+    return DropdownButtonFormField<String>(
+      value: _selectedUserId,
+      hint: const Text('Seleziona cliente'),
+      decoration: const InputDecoration(labelText: 'Cliente *'),
+      items: users.map((u) {
+        final fn   = u['firstName'] as String? ?? '';
+        final ln   = u['lastName']  as String? ?? '';
+        final name = '$fn $ln'.trim().isNotEmpty ? '$fn $ln'.trim() : u['email'] as String? ?? 'Utente';
+        return DropdownMenuItem(value: u['id'] as String, child: Text(name));
+      }).toList(),
+      onChanged: (v) => setState(() => _selectedUserId = v),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAB: APPUNTAMENTI (UTENTE)
+// ─────────────────────────────────────────────────────────────
+
+class _AppuntamentiTab extends StatefulWidget {
+  const _AppuntamentiTab();
+  @override
+  State<_AppuntamentiTab> createState() => _AppuntamentiTabState();
+}
+
+class _AppuntamentiTabState extends State<_AppuntamentiTab> with AutomaticKeepAliveClientMixin {
+  List<Map<String, dynamic>>? _appointments;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final list = await ApiService().getMyAppointments();
+      setState(() { _appointments = list; _loading = false; });
+    } catch (e) {
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  String _timeRange(Map<String, dynamic> appt) {
+    final s = DateTime.parse(appt['startTime'] as String).toLocal();
+    final e = DateTime.parse(appt['endTime']   as String).toLocal();
+    final date   = '${s.day.toString().padLeft(2,'0')}/${s.month.toString().padLeft(2,'0')}/${s.year}';
+    final startT = '${s.hour.toString().padLeft(2,'0')}:${s.minute.toString().padLeft(2,'0')}';
+    final endT   = '${e.hour.toString().padLeft(2,'0')}:${e.minute.toString().padLeft(2,'0')}';
+    return '$date   $startT – $endT';
+  }
+
+  Color  _statusColor(String s) {
+    if (s == 'CANCELLED') return AppColors.error;
+    if (s == 'CONFIRMED') return AppColors.success;
+    return AppColors.star;
+  }
+
+  String _statusLabel(String s) {
+    if (s == 'CANCELLED') return 'Annullato';
+    if (s == 'CONFIRMED') return 'Confermato';
+    return 'In attesa';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return _errorState(_error!, _load);
+    if (_appointments == null || _appointments!.isEmpty) {
+      return _emptyState(
+        icon: Icons.event_outlined,
+        title: 'Nessun appuntamento',
+        subtitle: 'Gli appuntamenti fissati dal tuo psicologo appariranno qui',
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(12),
+        itemCount: _appointments!.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, i) {
+          final appt   = _appointments![i];
+          final status = appt['status'] as String? ?? 'CONFIRMED';
+          final color  = _statusColor(status);
+          final psych  = appt['psychologist'] as Map<String, dynamic>? ?? {};
+          final psychName  = _psychName(psych);
+          final psychImage = ApiService.resolveUrl(psych['profileImage'] as String?);
+          return GlassCard(
+            noPadding: true,
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              leading: CircleAvatar(
+                radius: 22,
+                backgroundImage: (psychImage != null && psychImage.isNotEmpty)
+                    ? NetworkImage(psychImage) : null,
+                backgroundColor: AppColors.glassBg,
+                child: (psychImage == null || psychImage.isEmpty)
+                    ? const Icon(Icons.psychology_rounded, color: AppColors.textSecondary, size: 20)
+                    : null,
+              ),
+              title: Text(appt['title'] as String? ?? '',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const SizedBox(height: 2),
+                Text(psychName,
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                const SizedBox(height: 2),
+                Text(_timeRange(appt),
+                  style: const TextStyle(fontSize: 12, color: AppColors.textTertiary)),
+              ]),
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(20),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(_statusLabel(status),
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

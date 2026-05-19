@@ -213,3 +213,59 @@ class AppTheme {
     );
   }
 }
+
+// ─── Categorie specializzazioni ────────────────────────────────────────────────
+
+class SpecCategory {
+  final String label;
+  final IconData icon;
+  final Map<String, String> specs;
+  const SpecCategory({required this.label, required this.icon, required this.specs});
+}
+
+const kSpecCategories = <SpecCategory>[
+  SpecCategory(
+    label: 'Emozioni e benessere',
+    icon: Icons.mood_rounded,
+    specs: {
+      'specAnsia': 'Ansia',
+      'specUmore': 'Umore / depressione',
+      'specStress': 'Stress / lavoro',
+    },
+  ),
+  SpecCategory(
+    label: 'Relazioni',
+    icon: Icons.favorite_border_rounded,
+    specs: {
+      'specCoppia': 'Coppia',
+      'specRelazioni': 'Relazioni',
+      'specSessualita': 'Sessualità',
+    },
+  ),
+  SpecCategory(
+    label: 'Famiglia',
+    icon: Icons.family_restroom_rounded,
+    specs: {
+      'specGenitorialita': 'Genitorialità',
+      'specInfanzia': 'Infanzia / adolescenza',
+    },
+  ),
+  SpecCategory(
+    label: 'Identità e crescita',
+    icon: Icons.self_improvement_rounded,
+    specs: {
+      'specAutostima': 'Autostima',
+      'specTrauma': 'Trauma',
+      'specLutto': 'Lutto',
+    },
+  ),
+  SpecCategory(
+    label: 'Difficoltà specifiche',
+    icon: Icons.medical_services_outlined,
+    specs: {
+      'specDisturbiAlimentari': 'Disturbi alimentari',
+      'specDipendenze': 'Dipendenze',
+      'specNeurodivergenze': 'Neurodivergenze',
+    },
+  ),
+];
