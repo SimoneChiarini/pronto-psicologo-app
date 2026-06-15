@@ -214,58 +214,51 @@ class AppTheme {
   }
 }
 
-// ─── Categorie specializzazioni ────────────────────────────────────────────────
+// ─── Modelli Taxonomy Specializzazioni ────────────────────────────────────────
 
-class SpecCategory {
+class TaxLeaf {
+  final String code;
   final String label;
-  final IconData icon;
-  final Map<String, String> specs;
-  const SpecCategory({required this.label, required this.icon, required this.specs});
+  const TaxLeaf({required this.code, required this.label});
+
+  factory TaxLeaf.fromJson(Map<String, dynamic> j) =>
+      TaxLeaf(code: j['code'] as String, label: j['label'] as String);
 }
 
-const kSpecCategories = <SpecCategory>[
-  SpecCategory(
-    label: 'Emozioni e benessere',
-    icon: Icons.mood_rounded,
-    specs: {
-      'specAnsia': 'Ansia',
-      'specUmore': 'Umore / depressione',
-      'specStress': 'Stress / lavoro',
-    },
-  ),
-  SpecCategory(
-    label: 'Relazioni',
-    icon: Icons.favorite_border_rounded,
-    specs: {
-      'specCoppia': 'Coppia',
-      'specRelazioni': 'Relazioni',
-      'specSessualita': 'Sessualità',
-    },
-  ),
-  SpecCategory(
-    label: 'Famiglia',
-    icon: Icons.family_restroom_rounded,
-    specs: {
-      'specGenitorialita': 'Genitorialità',
-      'specInfanzia': 'Infanzia / adolescenza',
-    },
-  ),
-  SpecCategory(
-    label: 'Identità e crescita',
-    icon: Icons.self_improvement_rounded,
-    specs: {
-      'specAutostima': 'Autostima',
-      'specTrauma': 'Trauma',
-      'specLutto': 'Lutto',
-    },
-  ),
-  SpecCategory(
-    label: 'Difficoltà specifiche',
-    icon: Icons.medical_services_outlined,
-    specs: {
-      'specDisturbiAlimentari': 'Disturbi alimentari',
-      'specDipendenze': 'Dipendenze',
-      'specNeurodivergenze': 'Neurodivergenze',
-    },
-  ),
-];
+class TaxSub {
+  final String label;
+  final List<TaxLeaf> leaves;
+  const TaxSub({required this.label, required this.leaves});
+
+  factory TaxSub.fromJson(Map<String, dynamic> j) => TaxSub(
+        label: j['label'] as String,
+        leaves: (j['leaves'] as List).map((e) => TaxLeaf.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+}
+
+class TaxMacro {
+  final String code;
+  final String label;
+  final List<TaxSub>? subs;
+  final List<TaxLeaf>? leaves;
+
+  const TaxMacro({required this.code, required this.label, this.subs, this.leaves});
+
+  bool get hasSubs => subs != null && subs!.isNotEmpty;
+
+  List<TaxLeaf> allLeaves() {
+    if (hasSubs) return subs!.expand((s) => s.leaves).toList();
+    return leaves ?? [];
+  }
+
+  factory TaxMacro.fromJson(Map<String, dynamic> j) => TaxMacro(
+        code: j['code'] as String,
+        label: j['label'] as String,
+        subs: j['subs'] != null
+            ? (j['subs'] as List).map((e) => TaxSub.fromJson(e as Map<String, dynamic>)).toList()
+            : null,
+        leaves: j['leaves'] != null
+            ? (j['leaves'] as List).map((e) => TaxLeaf.fromJson(e as Map<String, dynamic>)).toList()
+            : null,
+      );
+}

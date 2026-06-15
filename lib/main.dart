@@ -8,6 +8,8 @@ import 'pages/register_page.dart';
 import 'pages/home_page.dart';
 import 'pages/conversation_page.dart';
 import 'pages/psychologist_profile_page.dart';
+import 'pages/email_pending_page.dart';
+import 'pages/phone_verify_page.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
@@ -63,7 +65,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       scaffoldMessengerKey: scaffoldMessengerKey,
-      title: 'Pronto Psicologo',
+      title: 'Luminia Care',
       theme: AppTheme.dark,
       debugShowCheckedModeBanner: false,
       initialRoute: '/login',
@@ -94,6 +96,23 @@ class MyApp extends StatelessWidget {
               psychologistId: args['psychologistId'] as String,
               role: args['role'] as String,
               isOwnProfile: args['isOwnProfile'] as bool? ?? false,
+            ),
+          );
+        }
+        if (settings.name == '/email-pending') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder: (_) => EmailPendingPage(
+              email: args['email'] as String,
+              phone: args['phone'] as String? ?? '',
+            ),
+          );
+        }
+        if (settings.name == '/phone-verify') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder: (_) => PhoneVerifyPage(
+              initialPhone: args['phone'] as String? ?? '',
             ),
           );
         }

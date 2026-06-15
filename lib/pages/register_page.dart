@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/image_picker_field.dart';
+import '../widgets/specialization_picker.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -32,29 +33,9 @@ class _RegisterPageState extends State<RegisterPage> {
   bool? _isMale;
   bool  _isOnlineOnly      = false;
   bool  _isPsychotherapist = false;
+  bool  _privacyAccepted   = false;
   final List<_AddressFields> _addresses = [_AddressFields()];
-
-  final Map<String, bool> _specs = {
-    'specAnsia': false,
-    'specUmore': false,
-    'specStress': false,
-    'specRelazioni': false,
-    'specCoppia': false,
-    'specGenitorialita': false,
-    'specInfanzia': false,
-    'specAutostima': false,
-    'specTrauma': false,
-    'specLutto': false,
-    'specSessualita': false,
-    'specDisturbiAlimentari': false,
-    'specDipendenze': false,
-    'specNeurodivergenze': false,
-  };
-
-  static Map<String, String> get _specLabels => {
-    for (final cat in kSpecCategories)
-      for (final e in cat.specs.entries) e.key: e.value,
-  };
+  Set<String> _tagCodes = {};
 
   @override
   void dispose() {
@@ -73,6 +54,10 @@ class _RegisterPageState extends State<RegisterPage> {
         setState(() => _error = 'Inserisci almeno un indirizzo studio');
         return;
       }
+    }
+    if (!_privacyAccepted) {
+      setState(() => _error = 'Devi accettare la Privacy Policy per continuare.');
+      return;
     }
     setState(() { _loading = true; _error = null; });
     try {
@@ -94,16 +79,16 @@ class _RegisterPageState extends State<RegisterPage> {
         if (_role == 'PSYCHOLOGIST') 'isOnlineOnly': _isOnlineOnly,
         if (_role == 'PSYCHOLOGIST') 'isPsychotherapist': _isPsychotherapist,
         if (_role == 'PSYCHOLOGIST') 'addresses': addresses,
-        if (_role == 'PSYCHOLOGIST') 'phone': _phoneController.text.trim(),
+        if (_phoneController.text.trim().isNotEmpty) 'phone': _phoneController.text.trim(),
         if (_role == 'PSYCHOLOGIST' && _isMale != null) 'isMale': _isMale,
-        if (_role == 'PSYCHOLOGIST') ..._specs,
+        if (_role == 'PSYCHOLOGIST' && _tagCodes.isNotEmpty) 'tagCodes': _tagCodes.toList(),
         if (imageUrl != null) 'profileImage': imageUrl,
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registrazione completata! Accedi con le tue credenziali.')),
-      );
-      Navigator.pushReplacementNamed(context, '/login');
+      Navigator.pushReplacementNamed(context, '/email-pending', arguments: {
+        'email': _emailController.text.trim(),
+        'phone': _phoneController.text.trim(),
+      });
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -131,6 +116,8 @@ class _RegisterPageState extends State<RegisterPage> {
                         onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
                       ),
                       const SizedBox(width: 4),
+                      Image.asset('assets/logo.jpg', height: 36, fit: BoxFit.contain),
+                      const SizedBox(width: 8),
                       Text(
                         'Crea account',
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -199,6 +186,23 @@ class _RegisterPageState extends State<RegisterPage> {
                           DropdownMenuItem(value: 'PSYCHOLOGIST', child: Text('Psicologo')),
                         ],
                         onChanged: (v) { if (v != null) setState(() => _role = v); },
+                      ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: _phoneController,
+                        decoration: const InputDecoration(
+                          labelText: 'Numero di telefono',
+                          hintText: 'Es. +39 333 1234567',
+                          prefixIcon: Icon(Icons.phone_outlined),
+                        ),
+                        keyboardType: TextInputType.phone,
+                        textInputAction: TextInputAction.next,
+                        validator: (v) {
+                          if (_role == 'PSYCHOLOGIST' && (v == null || v.isEmpty)) {
+                            return 'Obbligatorio per psicologi';
+                          }
+                          return null;
+                        },
                       ),
                     ]),
                   ),
@@ -354,17 +358,6 @@ class _RegisterPageState extends State<RegisterPage> {
                           const SizedBox(height: 14),
                         ],
 
-                        TextFormField(
-                          controller: _phoneController,
-                          decoration: const InputDecoration(
-                            labelText: 'Numero di telefono',
-                            hintText: 'Es. +39 055 1234567',
-                            prefixIcon: Icon(Icons.phone_outlined),
-                          ),
-                          keyboardType: TextInputType.phone,
-                          textInputAction: TextInputAction.next,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Inserisci il numero' : null,
-                        ),
                         const SizedBox(height: 20),
                         Center(
                           child: ImagePickerField(
@@ -376,7 +369,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       ]),
                     ),
 
-                    // Aree di specializzazione (per categoria)
+                    // Aree di specializzazione (gerarchiche)
                     const SizedBox(height: 16),
                     GlassCard(
                       radius: 20,
@@ -385,48 +378,72 @@ class _RegisterPageState extends State<RegisterPage> {
                         _SectionLabel(label: 'Aree di specializzazione', icon: Icons.psychology_outlined),
                         const SizedBox(height: 6),
                         Text(
-                          'Seleziona le aree in cui lavori (facoltativo)',
+                          'Scegli categoria → sottocategoria → disturbi/aree (puoi aggiungerne più di una)',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textTertiary),
                         ),
                         const SizedBox(height: 16),
-                        ...kSpecCategories.map((cat) => Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Row(children: [
-                              Icon(cat.icon, size: 13, color: AppColors.textSecondary),
-                              const SizedBox(width: 5),
-                              Text(cat.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-                            ]),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: cat.specs.entries.map((e) {
-                                final selected = _specs[e.key] ?? false;
-                                return FilterChip(
-                                  label: Text(e.value),
-                                  selected: selected,
-                                  onSelected: (v) => setState(() => _specs[e.key] = v),
-                                  selectedColor: AppColors.bgInverse,
-                                  checkmarkColor: AppColors.textInverse,
-                                  labelStyle: TextStyle(
-                                    fontSize: 12,
-                                    color: selected ? AppColors.textInverse : AppColors.textSecondary,
-                                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                                  ),
-                                  side: BorderSide(color: selected ? AppColors.bgInverse : AppColors.glassBorder),
-                                  backgroundColor: AppColors.bg,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                                );
-                              }).toList(),
-                            ),
-                          ]),
-                        )),
+                        SpecializationPicker(
+                          selectedCodes: _tagCodes,
+                          onChanged: (codes) => setState(() => _tagCodes = codes),
+                        ),
                       ]),
                     ),
                   ],
 
                   const SizedBox(height: 24),
+
+                  // ── Privacy Policy ─────────────────────────────────────
+                  GlassCard(
+                    radius: 14,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Checkbox(
+                          value: _privacyAccepted,
+                          onChanged: (v) => setState(() => _privacyAccepted = v ?? false),
+                          activeColor: AppColors.bgInverse,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              const Text(
+                                'Ho letto e accetto la ',
+                                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                              ),
+                              GestureDetector(
+                                onTap: () => showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (_) => _PrivacySheet(
+                                    isPsychologist: _role == 'PSYCHOLOGIST',
+                                  ),
+                                ),
+                                child: Text(
+                                  _role == 'PSYCHOLOGIST'
+                                      ? 'Privacy Policy per Professionisti'
+                                      : 'Privacy Policy',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textStrong,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
                   if (_error != null) ...[
                     Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 13), textAlign: TextAlign.center),
                     const SizedBox(height: 12),
@@ -452,6 +469,165 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRIVACY SHEET
+// ─────────────────────────────────────────────────────────────────────────────
+
+const String _privacyUser = '''
+INFORMATIVA SUL TRATTAMENTO DEI DATI PERSONALI
+(ai sensi degli artt. 13-14 del Regolamento UE 2016/679 – GDPR)
+
+⚠ TESTO DI PROVA – sarà sostituito dal testo definitivo redatto dall'avvocato.
+
+1. TITOLARE DEL TRATTAMENTO
+Luminia Care S.r.l. (in fase di costituzione), con sede legale in [indirizzo da definire].
+Contatto: privacy@luminiacare.it
+
+2. DATI RACCOLTI
+Il Titolare raccoglie: nome, cognome, indirizzo e-mail, numero di telefono (opzionale), posizione geografica (opzionale), immagine profilo (opzionale), token dispositivo per notifiche push.
+
+3. FINALITÀ E BASE GIURIDICA
+• Erogazione del servizio di abbinamento con professionisti della salute mentale — base: esecuzione del contratto (art. 6 par. 1 lett. b GDPR).
+• Invio di notifiche push per appuntamenti e messaggi — base: consenso (art. 6 par. 1 lett. a GDPR).
+• Verifica dell'identità tramite e-mail e/o SMS — base: esecuzione del contratto.
+
+4. CONSERVAZIONE
+I dati sono conservati per tutta la durata del rapporto contrattuale e per i 10 anni successivi alla sua cessazione, salvo diversi obblighi di legge.
+
+5. COMUNICAZIONE A TERZI
+I dati non vengono ceduti a terzi, salvo fornitori tecnici (Firebase, Railway e simili) che operano come responsabili del trattamento ai sensi dell'art. 28 GDPR.
+
+6. DIRITTI DELL'INTERESSATO
+Hai il diritto di accedere, rettificare, cancellare, limitare e opporti al trattamento, nonché alla portabilità dei dati. Per esercitarli scrivi a privacy@luminiacare.it.
+
+7. DIRITTO DI RECLAMO
+Hai il diritto di proporre reclamo al Garante per la protezione dei dati personali (www.garanteprivacy.it).
+''';
+
+const String _privacyPsychologist = '''
+INFORMATIVA SUL TRATTAMENTO DEI DATI PERSONALI – PROFESSIONISTI
+(ai sensi degli artt. 13-14 del Regolamento UE 2016/679 – GDPR)
+
+⚠ TESTO DI PROVA – sarà sostituito dal testo definitivo redatto dall'avvocato.
+
+1. TITOLARE DEL TRATTAMENTO
+Luminia Care S.r.l. (in fase di costituzione), con sede legale in [indirizzo da definire].
+Contatto: privacy@luminiacare.it
+
+2. DATI RACCOLTI
+Oltre ai dati raccolti per gli utenti standard, per i professionisti vengono trattati: numero di iscrizione all'Albo, qualifica professionale, aree di specializzazione, indirizzo/i dello studio, biografia professionale, disponibilità e calendario degli appuntamenti.
+
+3. FINALITÀ E BASE GIURIDICA
+• Pubblicazione del profilo professionale sulla piattaforma — base: esecuzione del contratto (art. 6 par. 1 lett. b GDPR).
+• Gestione degli appuntamenti con i clienti — base: esecuzione del contratto.
+• Verifica dell'iscrizione all'Albo — base: legittimo interesse del Titolare (art. 6 par. 1 lett. f GDPR).
+
+4. TRATTAMENTO DI DATI SANITARI
+In qualità di professionista iscritto all'Albo, sei titolare autonomo del trattamento dei dati sanitari dei tuoi pazienti/clienti. Luminia Care agisce come responsabile del trattamento (art. 28 GDPR) esclusivamente per i dati necessari all'erogazione del servizio di piattaforma.
+
+5. VISIBILITÀ DEI DATI
+Il profilo professionale (nome, cognome, albo, specializzazioni, indirizzo studio, foto) è visibile agli utenti registrati della piattaforma.
+
+6. CONSERVAZIONE
+I dati sono conservati per tutta la durata del rapporto e per i 10 anni successivi.
+
+7. DIRITTI DELL'INTERESSATO
+Hai il diritto di accedere, rettificare, cancellare, limitare e opporti al trattamento, nonché alla portabilità dei dati. Scrivi a privacy@luminiacare.it.
+
+8. DIRITTO DI RECLAMO
+Hai il diritto di proporre reclamo al Garante per la protezione dei dati personali (www.garanteprivacy.it).
+''';
+
+class _PrivacySheet extends StatelessWidget {
+  final bool isPsychologist;
+  const _PrivacySheet({required this.isPsychologist});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = isPsychologist ? _privacyPsychologist : _privacyUser;
+    final title = isPsychologist
+        ? 'Privacy Policy — Professionisti'
+        : 'Privacy Policy — Utenti';
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.glassBorder,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  const Icon(Icons.shield_outlined, size: 20, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    color: AppColors.textTertiary,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: controller,
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    height: 1.7,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text('Ho capito'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _GenderChip extends StatelessWidget {
   final String label;

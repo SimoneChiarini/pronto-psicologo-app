@@ -6,9 +6,12 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 class AuthService {
   static const _productionUrl = 'https://pronto-psicologo-backend-production.up.railway.app';
-  // Per sviluppo locale: 'http://192.168.1.184:3000' oppure 'http://10.0.2.2:3000' per emulatore
-  static const _localUrl = 'http://192.168.1.184:3000';
+  // localhost:3000 per Chrome/Windows desktop
+  // 192.168.1.184:3000 per dispositivo fisico sulla stessa rete WiFi
+  // 10.0.2.2:3000 per emulatore Android
+  static const _localUrl = 'http://localhost:3000';
 
+  // ⬇ Cambia qui per passare da locale a produzione
   static String get baseUrl => _productionUrl;
   static const _tokenKey = 'access_token';
 
@@ -93,6 +96,12 @@ class AuthService {
       final body = jsonDecode(response.body);
       throw Exception(body['message'] ?? 'Registrazione fallita');
     }
+
+    final body = jsonDecode(response.body);
+    final token = body['access_token'] as String;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+    syncFcmToken().catchError((_) {});
   }
 
   Future<Map<String, dynamic>> getProfile() async {

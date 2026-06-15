@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/specialization_picker.dart';
 
 // ─────────────────────────────────────────────────────────────
 // ENTRY POINT
@@ -350,19 +351,14 @@ class _ProfileInfo extends StatelessWidget {
     this.onEditTap,
   });
 
-  static Map<String, String> get _specLabels => {
-    for (final cat in kSpecCategories)
-      for (final e in cat.specs.entries) e.key: e.value,
-  };
-
   @override
   Widget build(BuildContext context) {
     final albo = psych['alboCode'] as String? ?? '';
     final bio  = psych['bio'] as String?;
-    final specs = _specLabels.entries
-        .where((e) => psych[e.key] == true)
-        .map((e) => e.value)
-        .toList();
+    final tagCodes  = (psych['tagCodes']  as List?)?.cast<String>() ?? [];
+    final tagLabels = (psych['tagLabels'] as List?)?.cast<String>() ?? tagCodes;
+    // mostra al max 8 tag per non appesantire il layout
+    final specs = tagLabels.take(8).toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 36, 20, 8),
@@ -396,12 +392,20 @@ class _ProfileInfo extends StatelessWidget {
         ],
         if (specs.isNotEmpty) ...[
           const SizedBox(height: 10),
-          Wrap(spacing: 6, runSpacing: 6, children: specs.map((s) => Chip(
-            label: Text(s, style: const TextStyle(fontSize: 11)),
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
-          )).toList()),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            ...specs.map((label) => Chip(
+              label: Text(label, style: const TextStyle(fontSize: 11)),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            )),
+            if (tagCodes.length > 8) Chip(
+              label: Text('+${tagCodes.length - 8} altro', style: const TextStyle(fontSize: 11)),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ]),
         ],
         const SizedBox(height: 8),
         const Divider(),
@@ -1931,15 +1935,10 @@ class _PsychEditSheetState extends State<_PsychEditSheet> {
   late final TextEditingController _bioCtrl;
   late final TextEditingController _phoneCtrl;
   final List<TextEditingController> _addrCtrls = [];
-  final Map<String, bool> _specs = {};
+  Set<String> _tagCodes = {};
   bool _isOnlineOnly      = false;
   bool _isPsychotherapist = false;
   bool _loading = false;
-
-  static Map<String, String> get _specLabels => {
-    for (final cat in kSpecCategories)
-      for (final e in cat.specs.entries) e.key: e.value,
-  };
 
   @override
   void initState() {
@@ -1958,7 +1957,9 @@ class _PsychEditSheetState extends State<_PsychEditSheet> {
       }
     }
 
-    for (final k in _specLabels.keys) _specs[k] = widget.psych[k] == true;
+    _tagCodes = Set<String>.from(
+      (widget.psych['tagCodes'] as List?)?.cast<String>() ?? [],
+    );
   }
 
   @override
@@ -1981,8 +1982,8 @@ class _PsychEditSheetState extends State<_PsychEditSheet> {
         'isOnlineOnly': _isOnlineOnly,
         'isPsychotherapist': _isPsychotherapist,
         'addresses': addresses,
+        'tagCodes': _tagCodes.toList(),
         if (_phoneCtrl.text.trim().isNotEmpty) 'phone': _phoneCtrl.text.trim(),
-        ..._specs,
       });
       if (!mounted) return;
       Navigator.pop(context);
@@ -2076,34 +2077,10 @@ class _PsychEditSheetState extends State<_PsychEditSheet> {
 
           const Text('Specializzazioni', style: TextStyle(fontSize: 12, color: AppColors.textTertiary)),
           const SizedBox(height: 10),
-          ...kSpecCategories.map((cat) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Icon(cat.icon, size: 12, color: AppColors.textSecondary),
-                const SizedBox(width: 4),
-                Text(cat.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-              ]),
-              const SizedBox(height: 6),
-              Wrap(spacing: 6, runSpacing: 6, children: cat.specs.entries.map((e) {
-                final selected = _specs[e.key] ?? false;
-                return FilterChip(
-                  label: Text(e.value, style: TextStyle(
-                    fontSize: 12,
-                    color: selected ? AppColors.textInverse : AppColors.textSecondary,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                  )),
-                  selected: selected,
-                  onSelected: (v) => setState(() => _specs[e.key] = v),
-                  selectedColor: AppColors.bgInverse,
-                  checkmarkColor: AppColors.textInverse,
-                  backgroundColor: AppColors.bg,
-                  side: BorderSide(color: selected ? AppColors.bgInverse : AppColors.glassBorder),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                );
-              }).toList()),
-            ]),
-          )),
+          SpecializationPicker(
+            selectedCodes: _tagCodes,
+            onChanged: (codes) => setState(() => _tagCodes = codes),
+          ),
           const SizedBox(height: 20),
 
           ElevatedButton(

@@ -144,60 +144,12 @@ class _Logo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 30, height: 30,
-              decoration: BoxDecoration(
-                color: AppColors.bgInverse,
-                borderRadius: BorderRadius.circular(7),
-              ),
-              alignment: Alignment.center,
-              child: const Text(
-                'p',
-                style: TextStyle(
-                  color: AppColors.textInverse,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            RichText(
-              text: const TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Pronto',
-                    style: TextStyle(
-                      color: AppColors.textStrong,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.01,
-                    ),
-                  ),
-                  TextSpan(
-                    text: 'Psicologo',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w400,
-                      letterSpacing: -0.01,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Supporto psicologico sempre vicino a te.',
-          style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
-        ),
-      ],
+    return Center(
+      child: Image.asset(
+        'assets/logo.jpg',
+        height: 160,
+        fit: BoxFit.contain,
+      ),
     );
   }
 }

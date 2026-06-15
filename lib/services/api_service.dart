@@ -64,6 +64,28 @@ class ApiService {
     }
   }
 
+  // ── VERIFICA TELEFONO ─────────────────────────────────────
+
+  Future<void> verifyPhone(String firebaseToken) async {
+    final headers = await _authHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/verify-phone'),
+      headers: headers,
+      body: jsonEncode({'firebaseToken': firebaseToken}),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Verifica telefono fallita');
+    }
+  }
+
+  // ── TAXONOMY SPECIALIZZAZIONI ─────────────────────────────
+
+  Future<List<dynamic>> getSpecializationTaxonomy() async {
+    final response = await http.get(Uri.parse('$baseUrl/specializations/taxonomy'));
+    if (response.statusCode != 200) throw Exception('Errore nel caricamento taxonomy');
+    return jsonDecode(response.body) as List;
+  }
+
   // ── PSICOLOGI ─────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getPsychologists() async {
@@ -83,9 +105,10 @@ class ApiService {
   }
 
   Future<List<Map<String, dynamic>>> aiRankPsychologists(String query) async {
+    final headers = await _authHeaders();
     final response = await http.post(
       Uri.parse('$baseUrl/psychologists/ai-rank'),
-      headers: {'Content-Type': 'application/json'},
+      headers: headers,
       body: jsonEncode({'query': query}),
     );
     if (response.statusCode != 200 && response.statusCode != 201) {

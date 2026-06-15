@@ -11,6 +11,8 @@ import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/image_picker_field.dart';
 import '../widgets/tinder_swiper.dart';
+import '../widgets/specialization_picker.dart';
+import '../data/specialization_data.dart';
 import 'psychologist_profile_page.dart';
 
 String _psychName(Map<String, dynamic> psych) {
@@ -81,48 +83,53 @@ class _HomePageState extends State<HomePage> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GLASS NAVIGATION RAIL
+// BOTTOM NAVIGATION BAR (stile social)
 // ─────────────────────────────────────────────────────────────
 
-class _GlassNavRail extends StatelessWidget {
+class _AppBottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
-  final List<NavigationRailDestination> destinations;
-  final Widget? leading;
-  final Widget? trailing;
+  final List<NavigationDestination> destinations;
 
-  const _GlassNavRail({
+  const _AppBottomNav({
     required this.selectedIndex,
     required this.onDestinationSelected,
     required this.destinations,
-    this.leading,
-    this.trailing,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 700;
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.bgInverse,
-        border: Border(right: BorderSide(color: AppColors.borderSubtle)),
+    return Theme(
+      data: Theme.of(context).copyWith(
+        navigationBarTheme: NavigationBarThemeData(
+          height: 62,
+          backgroundColor: AppColors.bgInverse,
+          indicatorColor: AppColors.bgInverseHover,
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          overlayColor: WidgetStateProperty.all(Colors.transparent),
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const IconThemeData(color: AppColors.textInverse, size: 22);
+            }
+            return const IconThemeData(color: Color(0xFF777777), size: 22);
+          }),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const TextStyle(
+                color: AppColors.textInverse, fontSize: 10, fontWeight: FontWeight.w600,
+              );
+            }
+            return const TextStyle(color: Color(0xFF777777), fontSize: 10);
+          }),
+        ),
       ),
-      child: NavigationRail(
-        backgroundColor: Colors.transparent,
+      child: NavigationBar(
+        backgroundColor: AppColors.bgInverse,
+        indicatorColor: AppColors.bgInverseHover,
         selectedIndex: selectedIndex,
         onDestinationSelected: onDestinationSelected,
-        useIndicator: true,
-        indicatorColor: AppColors.bgInverseHover,
-        selectedIconTheme: const IconThemeData(color: AppColors.textInverse, size: 20),
-        unselectedIconTheme: const IconThemeData(color: Color(0xFF777777), size: 20),
-        selectedLabelTextStyle: const TextStyle(
-          color: AppColors.textInverse, fontSize: 11, fontWeight: FontWeight.w600,
-        ),
-        unselectedLabelTextStyle: const TextStyle(color: Color(0xFF777777), fontSize: 11),
-        labelType: NavigationRailLabelType.selected,
-        minWidth: isWide ? 130 : 72,
-        leading: leading,
-        trailing: trailing,
+        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         destinations: destinations,
       ),
     );
@@ -192,7 +199,6 @@ class _UserHomeState extends State<_UserHome> {
   Widget build(BuildContext context) {
     final firstName = widget.profile['firstName'] as String? ?? '';
     final userId    = widget.profile['userId'] as String;
-    final isWide    = MediaQuery.of(context).size.width >= 700;
 
     final pages = [
       const _AskQuestionTab(),
@@ -204,50 +210,61 @@ class _UserHomeState extends State<_UserHome> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        titleSpacing: 0,
+        leading: const Padding(
+          padding: EdgeInsets.only(left: 14),
+          child: Icon(Icons.psychology_rounded, color: AppColors.textPrimary, size: 24),
+        ),
+        title: Text(firstName.isNotEmpty ? firstName : 'Luminia Care'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, color: AppColors.textTertiary, size: 20),
+            tooltip: 'Esci',
+            onPressed: widget.onLogout,
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: AppColors.borderSubtle),
+        ),
+      ),
+      bottomNavigationBar: _AppBottomNav(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.help_outline_rounded),
+            selectedIcon: Icon(Icons.help_rounded),
+            label: 'Domanda',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.style_outlined),
+            selectedIcon: Icon(Icons.style_rounded),
+            label: 'Risposte',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_bubble_rounded),
+            label: 'Chat',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline_rounded),
+            selectedIcon: Icon(Icons.people_rounded),
+            label: 'Psicologi',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.event_outlined),
+            selectedIcon: Icon(Icons.event_rounded),
+            label: 'Agenda',
+          ),
+        ],
+      ),
       body: AppBackground(
         child: SafeArea(
-          child: Row(
-            children: [
-              _GlassNavRail(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-                leading: _NavHeader(name: firstName.isNotEmpty ? firstName : 'ProntoPsicologo', isWide: isWide),
-                trailing: _NavTrailing(onLogout: widget.onLogout),
-                destinations: const [
-                  NavigationRailDestination(
-                    icon: Icon(Icons.help_outline_rounded),
-                    selectedIcon: Icon(Icons.help_rounded),
-                    label: Text('Domanda'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.style_outlined),
-                    selectedIcon: Icon(Icons.style_rounded),
-                    label: Text('Risposte'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.chat_bubble_outline_rounded),
-                    selectedIcon: Icon(Icons.chat_bubble_rounded),
-                    label: Text('Chat'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.people_outline_rounded),
-                    selectedIcon: Icon(Icons.people_rounded),
-                    label: Text('Psicologi'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.event_outlined),
-                    selectedIcon: Icon(Icons.event_rounded),
-                    label: Text('Appuntamenti'),
-                  ),
-                ],
-              ),
-              Expanded(
-                child: IndexedStack(
-                  index: _selectedIndex,
-                  children: pages,
-                ),
-              ),
-            ],
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: pages,
           ),
         ),
       ),
@@ -274,7 +291,6 @@ class _PsychologistHomeState extends State<_PsychologistHome> {
   @override
   Widget build(BuildContext context) {
     final userId = widget.profile['userId'] as String;
-    final isWide = MediaQuery.of(context).size.width >= 700;
 
     final pages = [
       _MyProfileTab(userId: userId),
@@ -284,40 +300,51 @@ class _PsychologistHomeState extends State<_PsychologistHome> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
+      appBar: AppBar(
+        titleSpacing: 0,
+        leading: const Padding(
+          padding: EdgeInsets.only(left: 14),
+          child: Icon(Icons.psychology_rounded, color: AppColors.textPrimary, size: 24),
+        ),
+        title: const Text('Psicologo'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, color: AppColors.textTertiary, size: 20),
+            tooltip: 'Esci',
+            onPressed: widget.onLogout,
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: AppColors.borderSubtle),
+        ),
+      ),
+      bottomNavigationBar: _AppBottomNav(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'Profilo',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.question_answer_outlined),
+            selectedIcon: Icon(Icons.question_answer_rounded),
+            label: 'Domande',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_bubble_rounded),
+            label: 'Chat',
+          ),
+        ],
+      ),
       body: AppBackground(
         child: SafeArea(
-          child: Row(
-            children: [
-              _GlassNavRail(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-                leading: _NavHeader(name: 'Psicologo', isWide: isWide),
-                trailing: _NavTrailing(onLogout: widget.onLogout),
-                destinations: const [
-                  NavigationRailDestination(
-                    icon: Icon(Icons.person_outline_rounded),
-                    selectedIcon: Icon(Icons.person_rounded),
-                    label: Text('Profilo'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.question_answer_outlined),
-                    selectedIcon: Icon(Icons.question_answer_rounded),
-                    label: Text('Domande'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.chat_bubble_outline_rounded),
-                    selectedIcon: Icon(Icons.chat_bubble_rounded),
-                    label: Text('Chat'),
-                  ),
-                ],
-              ),
-              Expanded(
-                child: IndexedStack(
-                  index: _selectedIndex,
-                  children: pages,
-                ),
-              ),
-            ],
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: pages,
           ),
         ),
       ),
@@ -342,126 +369,85 @@ class _AdminHomeState extends State<_AdminHome> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 700;
-
     const pages = [
       _AdminQuestionsTab(),
       _AdminConversationsTab(),
       _AdminAnswersTab(),
       _AdminPsychologistsTab(),
       _AdminUsersTab(),
-      _AdminSettingsTab(),
     ];
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: AppBackground(
-        child: SafeArea(
-          child: Row(
-            children: [
-              SingleChildScrollView(
-                child: IntrinsicHeight(
-                  child: _GlassNavRail(
-                    selectedIndex: _selectedIndex,
-                    onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-                    leading: _NavHeader(name: 'Admin', isWide: isWide),
-                    trailing: _NavTrailing(onLogout: widget.onLogout),
-                    destinations: const [
-                      NavigationRailDestination(
-                        icon: Icon(Icons.help_outline_rounded),
-                        selectedIcon: Icon(Icons.help_rounded),
-                        label: Text('Domande'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.chat_bubble_outline_rounded),
-                        selectedIcon: Icon(Icons.chat_bubble_rounded),
-                        label: Text('Conv.'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.question_answer_outlined),
-                        selectedIcon: Icon(Icons.question_answer_rounded),
-                        label: Text('Risposte'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.psychology_outlined),
-                        selectedIcon: Icon(Icons.psychology_rounded),
-                        label: Text('Psicologi'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.people_outline_rounded),
-                        selectedIcon: Icon(Icons.people_rounded),
-                        label: Text('Utenti'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.settings_outlined),
-                        selectedIcon: Icon(Icons.settings_rounded),
-                        label: Text('Settings'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Expanded(
-                child: IndexedStack(
-                  index: _selectedIndex,
-                  children: pages,
-                ),
-              ),
-            ],
-          ),
+      appBar: AppBar(
+        titleSpacing: 0,
+        leading: const Padding(
+          padding: EdgeInsets.only(left: 14),
+          child: Icon(Icons.admin_panel_settings_rounded, color: AppColors.textPrimary, size: 24),
         ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// NAV RAIL HELPERS
-// ─────────────────────────────────────────────────────────────
-
-class _NavHeader extends StatelessWidget {
-  final String name;
-  final bool isWide;
-  const _NavHeader({required this.name, required this.isWide});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Column(children: [
-        Container(
-          width: 38, height: 38,
-          decoration: BoxDecoration(
-            color: AppColors.glassBg,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.glassBorder),
+        title: const Text('Admin'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: AppColors.textTertiary, size: 20),
+            tooltip: 'Impostazioni',
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => SizedBox(
+                height: MediaQuery.of(context).size.height * 0.85,
+                child: const _AdminSettingsTab(),
+              ),
+            ),
           ),
-          child: const Icon(Icons.psychology_rounded, color: AppColors.textPrimary, size: 22),
-        ),
-        if (isWide) ...[
-          const SizedBox(height: 6),
-          Text(name,
-            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-            overflow: TextOverflow.ellipsis,
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, color: AppColors.textTertiary, size: 20),
+            tooltip: 'Esci',
+            onPressed: widget.onLogout,
           ),
         ],
-      ]),
-    );
-  }
-}
-
-class _NavTrailing extends StatelessWidget {
-  final VoidCallback onLogout;
-  const _NavTrailing({required this.onLogout});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: IconButton(
-        icon: const Icon(Icons.logout_rounded, color: AppColors.textTertiary, size: 20),
-        tooltip: 'Esci',
-        onPressed: onLogout,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: AppColors.borderSubtle),
+        ),
+      ),
+      bottomNavigationBar: _AppBottomNav(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.help_outline_rounded),
+            selectedIcon: Icon(Icons.help_rounded),
+            label: 'Domande',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_bubble_rounded),
+            label: 'Conv.',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.question_answer_outlined),
+            selectedIcon: Icon(Icons.question_answer_rounded),
+            label: 'Risposte',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.psychology_outlined),
+            selectedIcon: Icon(Icons.psychology_rounded),
+            label: 'Psicologi',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline_rounded),
+            selectedIcon: Icon(Icons.people_rounded),
+            label: 'Utenti',
+          ),
+        ],
+      ),
+      body: AppBackground(
+        child: SafeArea(
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: pages,
+          ),
+        ),
       ),
     );
   }
@@ -848,6 +834,11 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
   // Filtri attivi
   bool? _filterGender;
   final Set<String> _filterSpecs = {};
+  // Mappa code→label costruita dalla taxonomy locale
+  static final Map<String, String> _specLabelCache = {
+    for (final m in kTaxonomy)
+      for (final leaf in m.allLeaves()) leaf.code: leaf.label,
+  };
 
   // AI search
   List<Map<String, dynamic>>? _aiRanked;
@@ -920,7 +911,7 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
       list = list.where((p) => p['isMale'] == _filterGender).toList();
     }
     if (_filterSpecs.isNotEmpty) {
-      list = list.where((p) => _filterSpecs.every((s) => p[s] == true)).toList();
+      list = list.where((p) => _PsychFilter.matchesTags(p, _filterSpecs)).toList();
     }
     return list;
   }
@@ -929,20 +920,21 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
     if (_aiRanked != null) {
       var list = List<Map<String, dynamic>>.from(_aiRanked!);
       if (_filterGender != null) list = list.where((p) => p['isMale'] == _filterGender).toList();
-      if (_filterSpecs.isNotEmpty) list = list.where((p) => _filterSpecs.every((s) => p[s] == true)).toList();
+      if (_filterSpecs.isNotEmpty) list = list.where((p) => _PsychFilter.matchesTags(p, _filterSpecs)).toList();
       return list;
     }
     // When query is active (AI loading or failed), show all psychologists — don't do literal text match
     if (_query.isNotEmpty) {
       var list = List<Map<String, dynamic>>.from(_psychologists ?? []);
       if (_filterGender != null) list = list.where((p) => p['isMale'] == _filterGender).toList();
-      if (_filterSpecs.isNotEmpty) list = list.where((p) => _filterSpecs.every((s) => p[s] == true)).toList();
+      if (_filterSpecs.isNotEmpty) list = list.where((p) => _PsychFilter.matchesTags(p, _filterSpecs)).toList();
       return list;
     }
     return _filtered;
   }
 
   Future<void> _openFilters() async {
+    if (!mounted) return;
     final result = await showModalBottomSheet<_FilterResult>(
       context: context,
       isScrollControlled: true,
@@ -1041,7 +1033,7 @@ class _PsychologistsListTabState extends State<_PsychologistsListTab> {
                     onRemove: () => setState(() => _filterGender = null),
                   ),
                 ..._filterSpecs.map((s) => _ActiveChip(
-                  label: _PsychFilter.specLabels[s] ?? s,
+                  label: _specLabelCache[s] ?? s,
                   onRemove: () => setState(() => _filterSpecs.remove(s)),
                 )),
                 const SizedBox(width: 4),
@@ -1166,12 +1158,13 @@ class _ActiveChip extends StatelessWidget {
   }
 }
 
-// Dati condivisi filtri
+// Dati condivisi filtri (tagCodes dei filtri selezionati)
 class _PsychFilter {
-  static Map<String, String> get specLabels => {
-    for (final cat in kSpecCategories)
-      for (final e in cat.specs.entries) e.key: e.value,
-  };
+  static bool matchesTags(Map<String, dynamic> psych, Set<String> filterTags) {
+    if (filterTags.isEmpty) return true;
+    final codes = (psych['tagCodes'] as List?)?.cast<String>() ?? [];
+    return filterTags.any((t) => codes.contains(t));
+  }
 }
 
 class _FilterResult {
@@ -1272,38 +1265,15 @@ class _FilterSheetState extends State<_FilterSheet> {
               ),
               const SizedBox(height: 20),
 
-              // Sezioni specializzazioni per categoria
-              ...kSpecCategories.map((cat) => Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _SheetSection(
-                  icon: cat.icon,
-                  label: cat.label,
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: cat.specs.entries.map((e) {
-                      final sel = _specs.contains(e.key);
-                      return FilterChip(
-                        label: Text(e.value),
-                        selected: sel,
-                        onSelected: (v) => setState(() {
-                          if (v) _specs.add(e.key); else _specs.remove(e.key);
-                        }),
-                        selectedColor: AppColors.bgInverse,
-                        checkmarkColor: AppColors.textInverse,
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          color: sel ? AppColors.textInverse : AppColors.textSecondary,
-                          fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
-                        ),
-                        side: BorderSide(color: sel ? AppColors.bgInverse : AppColors.glassBorder),
-                        backgroundColor: AppColors.bg,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                      );
-                    }).toList(),
-                  ),
+              // Specializzazioni gerarchiche
+              _SheetSection(
+                icon: Icons.psychology_outlined,
+                label: 'Specializzazioni',
+                child: SpecializationPicker(
+                  selectedCodes: _specs,
+                  onChanged: (codes) => setState(() => _specs = codes),
                 ),
-              )),
+              ),
               const SizedBox(height: 24),
 
               // Bottone Applica
