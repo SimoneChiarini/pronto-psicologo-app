@@ -12,6 +12,7 @@ import '../widgets/glass_card.dart';
 import '../widgets/image_picker_field.dart';
 import '../widgets/tinder_swiper.dart';
 import '../widgets/specialization_picker.dart';
+import '../widgets/account_verification_card.dart';
 import '../data/specialization_data.dart';
 import 'psychologist_profile_page.dart';
 
@@ -197,7 +198,6 @@ class _UserHomeState extends State<_UserHome> {
 
   @override
   Widget build(BuildContext context) {
-    final firstName = widget.profile['firstName'] as String? ?? '';
     final userId    = widget.profile['userId'] as String;
 
     final pages = [
@@ -206,17 +206,23 @@ class _UserHomeState extends State<_UserHome> {
       _ConversationsTab(userId: userId, role: 'USER'),
       const _PsychologistsBrowseTab(),
       const _AppuntamentiTab(),
+      _UserProfileTab(onLogout: widget.onLogout),
     ];
 
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        titleSpacing: 0,
-        leading: const Padding(
-          padding: EdgeInsets.only(left: 14),
-          child: Icon(Icons.psychology_rounded, color: AppColors.textPrimary, size: 24),
+        toolbarHeight: 92,
+        automaticallyImplyLeading: false,
+        centerTitle: true,
+        title: ClipRect(
+          child: Align(
+            alignment: const Alignment(0, -0.395),
+            heightFactor: 0.62,
+            widthFactor: 1.0,
+            child: Image.asset('assets/logo.png', height: 150, fit: BoxFit.contain, filterQuality: FilterQuality.high),
+          ),
         ),
-        title: Text(firstName.isNotEmpty ? firstName : 'Luminia Care'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: AppColors.textTertiary, size: 20),
@@ -258,6 +264,11 @@ class _UserHomeState extends State<_UserHome> {
             selectedIcon: Icon(Icons.event_rounded),
             label: 'Agenda',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'Profilo',
+          ),
         ],
       ),
       body: AppBackground(
@@ -267,6 +278,111 @@ class _UserHomeState extends State<_UserHome> {
             children: pages,
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAB PROFILO UTENTE — account + stato verifica email/telefono
+// ─────────────────────────────────────────────────────────────
+
+class _UserProfileTab extends StatefulWidget {
+  final VoidCallback onLogout;
+  const _UserProfileTab({required this.onLogout});
+
+  @override
+  State<_UserProfileTab> createState() => _UserProfileTabState();
+}
+
+class _UserProfileTabState extends State<_UserProfileTab> {
+  final _auth = AuthService();
+
+  Map<String, dynamic>? _profile;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final p = await _auth.getProfile();
+      if (!mounted) return;
+      setState(() { _profile = p; _loading = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_profile == null) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(_error ?? 'Errore nel caricamento', style: const TextStyle(color: AppColors.error)),
+          const SizedBox(height: 12),
+          OutlinedButton(onPressed: _load, child: const Text('Riprova')),
+        ]),
+      );
+    }
+
+    final p = _profile!;
+    final firstName = (p['firstName'] as String?) ?? '';
+    final lastName = (p['lastName'] as String?) ?? '';
+    final email = (p['email'] as String?) ?? '';
+    final fullName = '$firstName $lastName'.trim();
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        children: [
+          const SizedBox(height: 8),
+          Center(
+            child: Column(children: [
+              CircleAvatar(
+                radius: 40,
+                backgroundColor: AppColors.bgPanel,
+                child: Text(
+                  (firstName.isNotEmpty
+                          ? firstName[0]
+                          : email.isNotEmpty
+                              ? email[0]
+                              : '?')
+                      .toUpperCase(),
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(fullName.isEmpty ? 'Utente' : fullName,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              const SizedBox(height: 2),
+              Text(email, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            ]),
+          ),
+          const SizedBox(height: 28),
+          const AccountVerificationCard(),
+          const SizedBox(height: 32),
+          OutlinedButton.icon(
+            onPressed: widget.onLogout,
+            icon: const Icon(Icons.logout_rounded, size: 18, color: AppColors.error),
+            label: const Text('Esci', style: TextStyle(color: AppColors.error)),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: const BorderSide(color: AppColors.borderSubtle),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -301,12 +417,17 @@ class _PsychologistHomeState extends State<_PsychologistHome> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        titleSpacing: 0,
-        leading: const Padding(
-          padding: EdgeInsets.only(left: 14),
-          child: Icon(Icons.psychology_rounded, color: AppColors.textPrimary, size: 24),
+        toolbarHeight: 92,
+        automaticallyImplyLeading: false,
+        centerTitle: true,
+        title: ClipRect(
+          child: Align(
+            alignment: const Alignment(0, -0.395),
+            heightFactor: 0.62,
+            widthFactor: 1.0,
+            child: Image.asset('assets/logo.png', height: 150, fit: BoxFit.contain, filterQuality: FilterQuality.high),
+          ),
         ),
-        title: const Text('Psicologo'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: AppColors.textTertiary, size: 20),
@@ -380,12 +501,17 @@ class _AdminHomeState extends State<_AdminHome> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        titleSpacing: 0,
-        leading: const Padding(
-          padding: EdgeInsets.only(left: 14),
-          child: Icon(Icons.admin_panel_settings_rounded, color: AppColors.textPrimary, size: 24),
+        toolbarHeight: 92,
+        automaticallyImplyLeading: false,
+        centerTitle: true,
+        title: ClipRect(
+          child: Align(
+            alignment: const Alignment(0, -0.395),
+            heightFactor: 0.62,
+            widthFactor: 1.0,
+            child: Image.asset('assets/logo.png', height: 150, fit: BoxFit.contain, filterQuality: FilterQuality.high),
+          ),
         ),
-        title: const Text('Admin'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: AppColors.textTertiary, size: 20),
@@ -2444,6 +2570,23 @@ class _AdminPsychologistsTabState extends State<_AdminPsychologistsTab> {
     }
   }
 
+  Future<void> _toggleVerify(String id, bool current) async {
+    try {
+      await ApiService().adminSetPsychologistVerified(id, !current);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(!current ? 'Psicologo verificato' : 'Verifica rimossa'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: AppColors.error,
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -2523,6 +2666,26 @@ class _AdminPsychologistsTabState extends State<_AdminPsychologistsTab> {
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
                             ),
                         ]),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: (p['verified'] == true)
+                              ? OutlinedButton.icon(
+                                  onPressed: () => _toggleVerify(p['id'] as String, true),
+                                  icon: const Icon(Icons.undo_rounded, size: 15),
+                                  label: const Text('Rimuovi verifica', style: TextStyle(fontSize: 12)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.error,
+                                    padding: const EdgeInsets.symmetric(vertical: 8)),
+                                )
+                              : ElevatedButton.icon(
+                                  onPressed: () => _toggleVerify(p['id'] as String, false),
+                                  icon: const Icon(Icons.verified_rounded, size: 16),
+                                  label: const Text('Verifica albo', style: TextStyle(fontSize: 12)),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 8)),
+                                ),
+                        ),
                       ]),
                     );
                   },

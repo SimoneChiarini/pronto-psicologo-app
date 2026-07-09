@@ -146,9 +146,10 @@ class _Logo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Image.asset(
-        'assets/logo.jpg',
-        height: 160,
+        'assets/logo.png',
+        height: 320,
         fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
       ),
     );
   }

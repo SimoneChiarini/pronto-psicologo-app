@@ -3,6 +3,8 @@ import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/specialization_picker.dart';
+import '../widgets/account_verification_card.dart';
+import '../widgets/subscription_card.dart';
 
 // ─────────────────────────────────────────────────────────────
 // ENTRY POINT
@@ -101,6 +103,28 @@ class _PsychologistProfilePageState extends State<PsychologistProfilePage>
     );
   }
 
+  void _openVerification() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          left: 20, right: 20, top: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: const SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            AccountVerificationCard(),
+          ]),
+        ),
+      ),
+    );
+  }
+
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
@@ -152,6 +176,15 @@ class _PsychologistProfilePageState extends State<PsychologistProfilePage>
                   onPressed: widget.onBack,
                 )
               : null,
+          actions: widget.isOwnProfile
+              ? [
+                  IconButton(
+                    icon: const Icon(Icons.verified_user_outlined),
+                    tooltip: 'Verifica account',
+                    onPressed: _openVerification,
+                  ),
+                ]
+              : null,
           expandedHeight: 220,
           pinned: true,
           backgroundColor: AppColors.bg,
@@ -178,6 +211,8 @@ class _PsychologistProfilePageState extends State<PsychologistProfilePage>
             onEditTap: widget.isOwnProfile ? _openEdit : null,
           ),
         ),
+        if (widget.isOwnProfile)
+          const SliverToBoxAdapter(child: SubscriptionCard()),
         SliverPersistentHeader(
           pinned: true,
           delegate: _StickyTabBarDelegate(

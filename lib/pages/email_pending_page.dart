@@ -25,7 +25,7 @@ class EmailPendingPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Spacer(),
-                Image.asset('assets/logo.jpg', height: 100, fit: BoxFit.contain),
+                Image.asset('assets/logo.png', height: 100, fit: BoxFit.contain),
                 const SizedBox(height: 20),
                 const Icon(
                   Icons.mark_email_unread_outlined,

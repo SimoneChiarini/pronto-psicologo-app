@@ -7,6 +7,12 @@ import '../widgets/glass_card.dart';
 import '../widgets/image_picker_field.dart';
 import '../widgets/specialization_picker.dart';
 
+// Prezzi abbonamento professionista (scaffolding: nessun addebito reale ancora)
+const String _priceMonthly = '9,99';
+const String _priceAnnual  = '59,99';
+// Risparmio annuale vs 12 mensilità (12×9,99=119,88 → ~50%)
+const int    _annualSavingPercent = 50;
+
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -34,6 +40,8 @@ class _RegisterPageState extends State<RegisterPage> {
   bool  _isOnlineOnly      = false;
   bool  _isPsychotherapist = false;
   bool  _privacyAccepted   = false;
+  bool  _contractAccepted  = false;
+  String _plan = 'ANNUAL'; // 'MONTHLY' | 'ANNUAL'
   final List<_AddressFields> _addresses = [_AddressFields()];
   Set<String> _tagCodes = {};
 
@@ -59,6 +67,10 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => _error = 'Devi accettare la Privacy Policy per continuare.');
       return;
     }
+    if (_role == 'PSYCHOLOGIST' && !_contractAccepted) {
+      setState(() => _error = 'Devi accettare il contratto di abbonamento per continuare.');
+      return;
+    }
     setState(() { _loading = true; _error = null; });
     try {
       String? imageUrl;
@@ -82,6 +94,8 @@ class _RegisterPageState extends State<RegisterPage> {
         if (_phoneController.text.trim().isNotEmpty) 'phone': _phoneController.text.trim(),
         if (_role == 'PSYCHOLOGIST' && _isMale != null) 'isMale': _isMale,
         if (_role == 'PSYCHOLOGIST' && _tagCodes.isNotEmpty) 'tagCodes': _tagCodes.toList(),
+        if (_role == 'PSYCHOLOGIST') 'subscriptionPlan': _plan,
+        if (_role == 'PSYCHOLOGIST') 'contractAccepted': _contractAccepted,
         if (imageUrl != null) 'profileImage': imageUrl,
       });
       if (!mounted) return;
@@ -108,6 +122,17 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Logo completo (come login)
+                  Center(
+                    child: Image.asset(
+                      'assets/logo.png',
+                      height: 200,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
                   // Header
                   Row(
                     children: [
@@ -115,9 +140,6 @@ class _RegisterPageState extends State<RegisterPage> {
                         icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textSecondary),
                         onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
                       ),
-                      const SizedBox(width: 4),
-                      Image.asset('assets/logo.jpg', height: 36, fit: BoxFit.contain),
-                      const SizedBox(width: 8),
                       Text(
                         'Crea account',
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -385,6 +407,81 @@ class _RegisterPageState extends State<RegisterPage> {
                         SpecializationPicker(
                           selectedCodes: _tagCodes,
                           onChanged: (codes) => setState(() => _tagCodes = codes),
+                        ),
+                      ]),
+                    ),
+
+                    // ── Abbonamento professionista ─────────────────────────
+                    const SizedBox(height: 16),
+                    GlassCard(
+                      radius: 20,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        _SectionLabel(label: 'Abbonamento', icon: Icons.workspace_premium_rounded),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Scegli il piano. Nessun addebito ora: pagherai solo dopo la verifica del tuo albo, per pubblicare il profilo.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textTertiary),
+                        ),
+                        const SizedBox(height: 16),
+                        _PlanCard(
+                          title: 'Annuale',
+                          price: '€$_priceAnnual',
+                          period: '/anno',
+                          highlight: 'Risparmi il $_annualSavingPercent%',
+                          selected: _plan == 'ANNUAL',
+                          onTap: () => setState(() => _plan = 'ANNUAL'),
+                        ),
+                        const SizedBox(height: 10),
+                        _PlanCard(
+                          title: 'Mensile',
+                          price: '€$_priceMonthly',
+                          period: '/mese',
+                          selected: _plan == 'MONTHLY',
+                          onTap: () => setState(() => _plan = 'MONTHLY'),
+                        ),
+                        const SizedBox(height: 16),
+                        // Checkbox contratto (obbligatorio per psicologi)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Checkbox(
+                              value: _contractAccepted,
+                              onChanged: (v) => setState(() => _contractAccepted = v ?? false),
+                              activeColor: AppColors.bgInverse,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  const Text(
+                                    'Ho letto e accetto il ',
+                                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => showModalBottomSheet(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      backgroundColor: Colors.transparent,
+                                      builder: (_) => const _ContractSheet(),
+                                    ),
+                                    child: const Text(
+                                      'Contratto di abbonamento',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textStrong,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ]),
                     ),
@@ -685,6 +782,209 @@ class _SectionLabel extends StatelessWidget {
       const SizedBox(width: 6),
       Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary)),
     ]);
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  final String title;
+  final String price;
+  final String period;
+  final String? highlight;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PlanCard({
+    required this.title,
+    required this.price,
+    required this.period,
+    required this.selected,
+    required this.onTap,
+    this.highlight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.bgInverse : AppColors.bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppColors.bgInverse : AppColors.glassBorder,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(children: [
+          Icon(
+            selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+            size: 20,
+            color: selected ? AppColors.textInverse : AppColors.textTertiary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.textInverse : AppColors.textPrimary,
+                ),
+              ),
+              if (highlight != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  highlight!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? AppColors.textInverse : AppColors.primary,
+                  ),
+                ),
+              ],
+            ]),
+          ),
+          Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+            Text(
+              price,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: selected ? AppColors.textInverse : AppColors.textPrimary,
+              ),
+            ),
+            Text(
+              period,
+              style: TextStyle(
+                fontSize: 12,
+                color: selected ? AppColors.textInverse : AppColors.textTertiary,
+              ),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTRATTO DI ABBONAMENTO
+// ─────────────────────────────────────────────────────────────────────────────
+
+const String _contractText = '''
+CONTRATTO DI ABBONAMENTO – PROFESSIONISTI
+
+⚠ TESTO DI PROVA – sarà sostituito dal testo definitivo redatto dall'avvocato.
+
+1. OGGETTO
+Il presente contratto disciplina l'abbonamento al servizio Luminia Care che consente al professionista iscritto all'Albo di pubblicare il proprio profilo, gestire appuntamenti e ricevere richieste dagli utenti della piattaforma.
+
+2. PIANI E CORRISPETTIVI
+• Piano mensile: € 9,99 al mese (IVA inclusa), rinnovo automatico ogni mese.
+• Piano annuale: € 59,99 all'anno (IVA inclusa), rinnovo automatico ogni 12 mesi.
+Il piano selezionato in fase di registrazione potrà essere modificato dalle impostazioni dell'account.
+
+3. ATTIVAZIONE E PAGAMENTO
+Nessun importo è dovuto al momento della registrazione. L'abbonamento diventa esigibile ed efficace soltanto dopo la verifica dell'iscrizione all'Albo da parte di Luminia Care. Solo a seguito dell'esito positivo della verifica il professionista sarà invitato a perfezionare il pagamento per la pubblicazione del profilo.
+
+4. RINNOVO E DISDETTA
+L'abbonamento si rinnova automaticamente alla scadenza al medesimo prezzo, salvo disdetta comunicata prima del rinnovo tramite le impostazioni dell'account o scrivendo a supporto@luminiacare.it.
+
+5. DIRITTO DI RECESSO
+Il professionista può recedere secondo i termini di legge. Il recesso comporta la cessazione della pubblicazione del profilo al termine del periodo già pagato.
+
+6. OBBLIGHI DEL PROFESSIONISTA
+Il professionista garantisce la veridicità dei dati forniti, la validità dell'iscrizione all'Albo e il rispetto del codice deontologico. Luminia Care si riserva di sospendere l'account in caso di dati non veritieri.
+
+7. LIMITAZIONE DI RESPONSABILITÀ
+Luminia Care fornisce esclusivamente il servizio tecnologico di piattaforma e non è parte del rapporto professionale tra il professionista e i suoi clienti/pazienti.
+
+8. FORO COMPETENTE
+Per ogni controversia è competente il foro di [città da definire].
+''';
+
+class _ContractSheet extends StatelessWidget {
+  const _ContractSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.glassBorder,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  const Icon(Icons.description_outlined, size: 20, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Contratto di abbonamento',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    color: AppColors.textTertiary,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: controller,
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                child: const Text(
+                  _contractText,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    height: 1.7,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text('Ho capito'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

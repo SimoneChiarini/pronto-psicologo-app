@@ -78,6 +78,20 @@ class ApiService {
     }
   }
 
+  Future<String> resendVerificationEmail() async {
+    final headers = await _authHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/resend-verification-email'),
+      headers: headers,
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? 'Invio email fallito');
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return body['message'] as String? ?? 'Email inviata';
+  }
+
   // ── TAXONOMY SPECIALIZZAZIONI ─────────────────────────────
 
   Future<List<dynamic>> getSpecializationTaxonomy() async {
@@ -127,6 +141,29 @@ class ApiService {
     if (response.statusCode != 200) {
       throw Exception('Errore nell\'aggiornamento del profilo');
     }
+  }
+
+  // ── ABBONAMENTO / BILLING ─────────────────────────────────
+
+  /// Stato abbonamento del professionista corrente.
+  /// Ritorna { verified, subscriptionActive, subscriptionPlan }.
+  Future<Map<String, dynamic>> getBillingStatus() async {
+    final headers = await _authHeaders();
+    final response = await http.get(Uri.parse('$baseUrl/billing/status'), headers: headers);
+    if (response.statusCode != 200) throw Exception('Errore nel caricamento dello stato abbonamento');
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// Crea una sessione Stripe Checkout e ritorna l'URL di pagamento.
+  Future<String> createCheckout() async {
+    final headers = await _authHeaders();
+    final response = await http.post(Uri.parse('$baseUrl/billing/checkout'), headers: headers);
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? 'Errore nell\'avvio del pagamento');
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return body['url'] as String;
   }
 
   // ── UPLOAD IMMAGINE ───────────────────────────────────────
@@ -407,6 +444,20 @@ class ApiService {
     final response = await http.get(Uri.parse('$baseUrl/admin/psychologists'), headers: headers);
     if (response.statusCode != 200) throw Exception('Errore');
     return (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Imposta lo stato di verifica albo di uno psicologo (solo admin).
+  Future<void> adminSetPsychologistVerified(String id, bool verified) async {
+    final headers = await _authHeaders();
+    final response = await http.patch(
+      Uri.parse('$baseUrl/admin/psychologists/$id/verify'),
+      headers: headers,
+      body: jsonEncode({'verified': verified}),
+    );
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? 'Errore nella verifica');
+    }
   }
 
   Future<List<Map<String, dynamic>>> getAdminQuestions() async {
