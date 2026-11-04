@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data/report_reasons.dart';
 import '../services/api_service.dart';
+import '../services/realtime_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 
@@ -38,11 +40,16 @@ class _ConversationPageState extends State<ConversationPage> {
   // (conversazione esistente e nessuna recensione già lasciata).
   bool _canReview = false;
 
+  StreamSubscription<RealtimeEvent>? _liveSub;
+
   @override
   void initState() {
     super.initState();
     _loadMessages();
     if (widget.role == 'USER') _loadReviewEligibility();
+    // Nuovi messaggi in tempo reale (anche quelli inviati da altre schede/dispositivi)
+    RealtimeService.instance.subscribe('conversation', widget.conversationId);
+    _liveSub = RealtimeService.instance.listenRoom('conversation', widget.conversationId, _loadMessages);
   }
 
   Future<void> _loadReviewEligibility() async {
@@ -56,6 +63,8 @@ class _ConversationPageState extends State<ConversationPage> {
 
   @override
   void dispose() {
+    _liveSub?.cancel();
+    RealtimeService.instance.unsubscribe('conversation', widget.conversationId);
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -64,13 +73,16 @@ class _ConversationPageState extends State<ConversationPage> {
   Future<void> _loadMessages() async {
     try {
       final msgs = await ApiService().getMessages(widget.conversationId);
+      // Può arrivare un evento in tempo reale mentre la pagina si chiude
+      if (!mounted) return;
+      final grew = msgs.length > _messages.length;
       setState(() {
         _messages = msgs;
         _loading = false;
       });
-      _scrollToBottom();
+      if (grew) _scrollToBottom();
     } catch (e) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 

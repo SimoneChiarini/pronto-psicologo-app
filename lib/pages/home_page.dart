@@ -13,9 +13,16 @@ import '../widgets/image_picker_field.dart';
 import '../widgets/tinder_swiper.dart';
 import '../widgets/specialization_picker.dart';
 import '../widgets/account_verification_card.dart';
+import '../widgets/delete_account_button.dart';
+import '../widgets/export_data_button.dart';
 import '../data/specialization_data.dart';
 import '../data/report_reasons.dart';
 import 'psychologist_profile_page.dart';
+import 'pro/pro_tab.dart';
+import 'pro/case_page.dart';
+import 'pro/group_page.dart';
+import 'pro/supervision_tab.dart';
+import '../services/realtime_service.dart';
 
 String _psychName(Map<String, dynamic> psych) {
   final u = psych['user'] as Map<String, dynamic>? ?? {};
@@ -30,7 +37,9 @@ String _psychName(Map<String, dynamic> psych) {
 // ─────────────────────────────────────────────────────────────
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  /// true quando si arriva da un link /#/pro (ritorno da Stripe): apre la tab Colleghi
+  final bool openProTab;
+  const HomePage({super.key, this.openProTab = false});
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -40,17 +49,62 @@ class _HomePageState extends State<HomePage> {
   Map<String, dynamic>? _profile;
   bool _loading = true;
   String? _error;
+  StreamSubscription<Map<String, dynamic>>? _notifSub;
 
   @override
   void initState() { super.initState(); _loadProfile(); }
+
+  @override
+  void dispose() {
+    _notifSub?.cancel();
+    super.dispose();
+  }
 
   Future<void> _loadProfile() async {
     try {
       final p = await _authService.getProfile();
       setState(() { _profile = p; _loading = false; });
+      _startRealtime();
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });
     }
+  }
+
+  /// Tempo reale + notifiche: socket per gli avvisi con l'app aperta,
+  /// token FCM aggiornato per le push quando l'app è chiusa.
+  void _startRealtime() {
+    RealtimeService.instance.connect();
+    _authService.syncFcmToken().catchError((_) {});
+    _notifSub ??= RealtimeService.instance.notifications.listen(_showInAppNotification);
+  }
+
+  void _showInAppNotification(Map<String, dynamic> n) {
+    if (!mounted) return;
+    final type = n['type'] as String?;
+    // Se la notifica riguarda una chat o un caso già aperto a schermo, la pagina
+    // si aggiorna da sola: l'avviso serve comunque per le altre schermate.
+    Widget? target;
+    if ((type == 'case_new' || type == 'case_message') && n['caseId'] != null) {
+      target = CasePage(caseId: n['caseId'] as String);
+    } else if ((type == 'group_request' || type == 'group_approved' || type == 'meeting') && n['groupId'] != null) {
+      target = GroupPage(groupId: n['groupId'] as String);
+    } else if (type == 'supervision' && n['supervisionId'] != null) {
+      target = SupervisionDetailPage(supervisionId: n['supervisionId'] as String);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 5),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(n['title'] as String? ?? 'Notifica', style: const TextStyle(fontWeight: FontWeight.bold)),
+        if ((n['body'] as String?)?.isNotEmpty ?? false) Text(n['body'] as String),
+      ]),
+      action: target == null
+          ? null
+          : SnackBarAction(
+              label: 'Apri',
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => target!)),
+            ),
+    ));
   }
 
   Future<void> _logout() async {
@@ -79,7 +133,9 @@ class _HomePageState extends State<HomePage> {
     }
     final role = _profile?['role'] ?? '';
     if (role == 'ADMIN') return _AdminHome(onLogout: _logout);
-    if (role == 'PSYCHOLOGIST') return _PsychologistHome(profile: _profile!, onLogout: _logout);
+    if (role == 'PSYCHOLOGIST') {
+      return _PsychologistHome(profile: _profile!, onLogout: _logout, initialIndex: widget.openProTab ? 3 : 0);
+    }
     return _UserHome(profile: _profile!, onLogout: _logout);
   }
 }
@@ -383,6 +439,9 @@ class _UserProfileTabState extends State<_UserProfileTab> {
               side: const BorderSide(color: AppColors.borderSubtle),
             ),
           ),
+          const SizedBox(height: 16),
+          const Center(child: ExportDataButton()),
+          const Center(child: DeleteAccountButton()),
         ],
       ),
     );
@@ -396,14 +455,15 @@ class _UserProfileTabState extends State<_UserProfileTab> {
 class _PsychologistHome extends StatefulWidget {
   final Map<String, dynamic> profile;
   final VoidCallback onLogout;
-  const _PsychologistHome({required this.profile, required this.onLogout});
+  final int initialIndex;
+  const _PsychologistHome({required this.profile, required this.onLogout, this.initialIndex = 0});
 
   @override
   State<_PsychologistHome> createState() => _PsychologistHomeState();
 }
 
 class _PsychologistHomeState extends State<_PsychologistHome> {
-  int _selectedIndex = 0;
+  late int _selectedIndex = widget.initialIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -413,6 +473,7 @@ class _PsychologistHomeState extends State<_PsychologistHome> {
       _MyProfileTab(userId: userId),
       const _QuestionsForPsychTab(),
       _ConversationsTab(userId: userId, role: 'PSYCHOLOGIST'),
+      const ProTab(),
     ];
 
     return Scaffold(
@@ -459,6 +520,11 @@ class _PsychologistHomeState extends State<_PsychologistHome> {
             icon: Icon(Icons.chat_bubble_outline_rounded),
             selectedIcon: Icon(Icons.chat_bubble_rounded),
             label: 'Chat',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.diversity_3_outlined),
+            selectedIcon: Icon(Icons.diversity_3_rounded),
+            label: 'Colleghi',
           ),
         ],
       ),
@@ -697,16 +763,33 @@ class _ConversationsTabState extends State<_ConversationsTab> with AutomaticKeep
   @override
   bool get wantKeepAlive => true;
 
-  @override
-  void initState() { super.initState(); _load(); }
+  StreamSubscription<Map<String, dynamic>>? _notifSub;
 
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    // Nuovo messaggio: aggiorna l'ordine delle conversazioni senza spinner
+    _notifSub = RealtimeService.instance.notifications
+        .where((n) => n['type'] == 'message')
+        .listen((_) => _load(silent: true));
+  }
+
+  @override
+  void dispose() {
+    _notifSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) setState(() { _loading = true; _error = null; });
     try {
       final list = await ApiService().getMyConversations();
+      if (!mounted) return;
       setState(() { _conversations = list; _loading = false; });
     } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+      // Un aggiornamento silenzioso fallito non sostituisce la lista con un errore
+      if (mounted && !silent) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
@@ -2543,10 +2626,19 @@ class _AdminReportsTabState extends State<_AdminReportsTab> {
           ),
         ]),
         const SizedBox(height: 6),
-        Text('Segnalato: ${_adminUserName(reported)} (${_roleLabel(reported)})',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-        Text('Da: ${_adminUserName(reporter)} (${_roleLabel(reporter)})',
-            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        // reported/reporter sono null se l'account è stato poi cancellato
+        Text(
+          r['reported'] == null
+              ? 'Segnalato: ${r['reportedLabel'] ?? '—'} · account eliminato'
+              : 'Segnalato: ${_adminUserName(reported)} (${_roleLabel(reported)})',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        Text(
+          r['reporter'] == null
+              ? 'Da: account eliminato'
+              : 'Da: ${_adminUserName(reporter)} (${_roleLabel(reporter)})',
+          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
         if (date != null)
           Text(
             '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} '
@@ -2556,6 +2648,29 @@ class _AdminReportsTabState extends State<_AdminReportsTab> {
         if (details != null && details.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(details, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+        ],
+        // Area professionisti: l'admin vede solo il messaggio segnalato, non il resto del gruppo
+        if (r['caseMessage'] != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: AppColors.bgPanel, borderRadius: BorderRadius.circular(8)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                'Messaggio segnalato · ${(r['caseMessage']['case']?['group']?['type'] == 'SUPERVISION') ? 'Supervisione' : 'Intervisione'} '
+                '"${r['caseMessage']['case']?['group']?['name'] ?? ''}" · caso "${r['caseMessage']['case']?['title'] ?? ''}"',
+                style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                r['caseMessage']['deletedAt'] != null
+                    ? '(eliminato dall\'autore)'
+                    : (r['caseMessage']['content'] as String? ?? ''),
+                style: const TextStyle(fontSize: 13),
+              ),
+            ]),
+          ),
         ],
         if (note != null && note.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -2935,8 +3050,8 @@ class _AdminPsychologistsTabState extends State<_AdminPsychologistsTab> {
                             ),
                         ]),
                         const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
+                        Row(children: [
+                        Expanded(
                           child: (p['verified'] == true)
                               ? OutlinedButton.icon(
                                   onPressed: () => _toggleVerify(p['id'] as String, true),
@@ -2954,6 +3069,21 @@ class _AdminPsychologistsTabState extends State<_AdminPsychologistsTab> {
                                     padding: const EdgeInsets.symmetric(vertical: 8)),
                                 ),
                         ),
+                        const SizedBox(width: 6),
+                        IconButton(
+                          tooltip: 'Elimina account',
+                          icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                          onPressed: () async {
+                            final deleted = await _adminConfirmAndDelete(
+                              context,
+                              name: _adminUserName(user),
+                              isPsychologist: true,
+                              doDelete: () => ApiService().adminDeletePsychologist(p['id'] as String),
+                            );
+                            if (deleted) await _load();
+                          },
+                        ),
+                        ]),
                       ]),
                     );
                   },
@@ -2961,6 +3091,74 @@ class _AdminPsychologistsTabState extends State<_AdminPsychologistsTab> {
         ),
       ),
     ]);
+  }
+}
+
+// ── Admin: cancellazione account ──────────────────────────────
+
+/// Conferma la cancellazione da admin facendo digitare "ELIMINA", poi esegue
+/// [doDelete]. Ritorna true se l'account è stato eliminato.
+Future<bool> _adminConfirmAndDelete(
+  BuildContext context, {
+  required String name,
+  required bool isPsychologist,
+  required Future<void> Function() doDelete,
+}) async {
+  final ctrl = TextEditingController();
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocal) => AlertDialog(
+        title: const Text('Eliminare l\'account?'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          Text(
+            isPsychologist
+                ? 'Verranno eliminati profilo, post, risposte, agenda, conversazioni e recensioni ricevute. '
+                  'L\'abbonamento Stripe verrà disdetto subito.'
+                : 'Verranno eliminati domande, conversazioni, recensioni e appuntamenti.',
+            style: const TextStyle(fontSize: 13, height: 1.4),
+          ),
+          const SizedBox(height: 6),
+          const Text('Le segnalazioni restano. L\'utente riceverà un\'email. Operazione definitiva.',
+              style: TextStyle(fontSize: 12, color: AppColors.textTertiary)),
+          const SizedBox(height: 14),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            onChanged: (_) => setLocal(() {}),
+            decoration: const InputDecoration(labelText: 'Scrivi ELIMINA per confermare'),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
+            onPressed: ctrl.text.trim().toUpperCase() == 'ELIMINA' ? () => Navigator.pop(ctx, true) : null,
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    ),
+  );
+  // ctrl non viene disposto qui: il dialog lo usa ancora durante l'animazione di chiusura
+  if (confirmed != true || !context.mounted) return false;
+
+  try {
+    await doDelete();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Account di $name eliminato')));
+    }
+    return true;
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: AppColors.error,
+      ));
+    }
+    return false;
   }
 }
 
@@ -3046,14 +3244,29 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
                         title: Text(_adminUserName(u),
                             style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: Text(u['email'] as String? ?? ''),
-                        trailing: Column(mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end, children: [
-                          Text(_formatDate(u['createdAt'] as String?),
-                              style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
-                          const SizedBox(height: 2),
-                          Icon(hasLocation ? Icons.location_on_rounded : Icons.location_off_rounded,
-                              size: 14,
-                              color: hasLocation ? AppColors.success : AppColors.textTertiary),
+                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Column(mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end, children: [
+                            Text(_formatDate(u['createdAt'] as String?),
+                                style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
+                            const SizedBox(height: 2),
+                            Icon(hasLocation ? Icons.location_on_rounded : Icons.location_off_rounded,
+                                size: 14,
+                                color: hasLocation ? AppColors.success : AppColors.textTertiary),
+                          ]),
+                          IconButton(
+                            tooltip: 'Elimina account',
+                            icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
+                            onPressed: () async {
+                              final deleted = await _adminConfirmAndDelete(
+                                context,
+                                name: _adminUserName(u),
+                                isPsychologist: false,
+                                doDelete: () => ApiService().adminDeleteUser(u['id'] as String),
+                              );
+                              if (deleted) await _load();
+                            },
+                          ),
                         ]),
                       ),
                     );
@@ -3077,6 +3290,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
   final _radiusCtrl     = TextEditingController();
   final _minutesCtrl    = TextEditingController();
   final _maxAnswersCtrl = TextEditingController();
+  final _maxGroupCtrl   = TextEditingController();
   bool _loading = true;
   bool _saving  = false;
 
@@ -3084,7 +3298,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
   void initState() { super.initState(); _load(); }
 
   @override
-  void dispose() { _radiusCtrl.dispose(); _minutesCtrl.dispose(); _maxAnswersCtrl.dispose(); super.dispose(); }
+  void dispose() { _radiusCtrl.dispose(); _minutesCtrl.dispose(); _maxAnswersCtrl.dispose(); _maxGroupCtrl.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -3093,6 +3307,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
       _radiusCtrl.text     = (s['radiusKm']     ?? 50).toString();
       _minutesCtrl.text    = (s['expandMinutes'] ?? 60).toString();
       _maxAnswersCtrl.text = (s['maxAnswers']    ?? 5).toString();
+      _maxGroupCtrl.text   = (s['maxGroupMembers'] ?? 0).toString();
       setState(() => _loading = false);
     } catch (_) { setState(() => _loading = false); }
   }
@@ -3104,6 +3319,7 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
         radiusKm:      double.tryParse(_radiusCtrl.text),
         expandMinutes: int.tryParse(_minutesCtrl.text),
         maxAnswers:    int.tryParse(_maxAnswersCtrl.text),
+        maxGroupMembers: int.tryParse(_maxGroupCtrl.text),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3154,6 +3370,13 @@ class _AdminSettingsTabState extends State<_AdminSettingsTab> {
               label: 'Max risposte per domanda',
               hint: '5',
               helper: 'Dopo N risposte la domanda viene nascosta agli altri psicologi.',
+            ),
+            const SizedBox(height: 20),
+            _SettingField(
+              controller: _maxGroupCtrl,
+              label: 'Max membri per gruppo (intervisione/supervisione)',
+              hint: '0',
+              helper: '0 = nessun limite. Vale per i nuovi ingressi, non espelle chi è già dentro.',
             ),
           ]),
         ),

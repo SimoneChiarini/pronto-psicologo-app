@@ -104,6 +104,17 @@ class _LoginPageState extends State<LoginPage> {
                             onFieldSubmitted: (_) => _submit(),
                             validator: (v) => (v == null || v.isEmpty) ? 'Inserisci la password' : null,
                           ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () => Navigator.pushNamed(
+                                context,
+                                '/forgot-password',
+                                arguments: {'email': _emailController.text.trim()},
+                              ),
+                              child: const Text('Password dimenticata?', style: TextStyle(fontSize: 13)),
+                            ),
+                          ),
                           if (_error != null) ...[
                             const SizedBox(height: 16),
                             Text(

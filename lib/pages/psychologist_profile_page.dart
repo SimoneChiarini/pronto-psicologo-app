@@ -4,6 +4,8 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/specialization_picker.dart';
 import '../widgets/account_verification_card.dart';
+import '../widgets/delete_account_button.dart';
+import '../widgets/export_data_button.dart';
 import '../widgets/subscription_card.dart';
 
 // ─────────────────────────────────────────────────────────────
@@ -115,6 +117,9 @@ class _PsychologistProfilePageState extends State<PsychologistProfilePage>
         child: const SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             AccountVerificationCard(),
+            SizedBox(height: 16),
+            ExportDataButton(),
+            DeleteAccountButton(isPsychologist: true),
           ]),
         ),
       ),
@@ -175,7 +180,7 @@ class _PsychologistProfilePageState extends State<PsychologistProfilePage>
               ? [
                   IconButton(
                     icon: const Icon(Icons.verified_user_outlined),
-                    tooltip: 'Verifica account',
+                    tooltip: 'Account',
                     onPressed: _openVerification,
                   ),
                 ]

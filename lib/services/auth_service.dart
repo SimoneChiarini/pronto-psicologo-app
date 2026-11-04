@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'realtime_service.dart';
 
 class AuthService {
   static const _productionUrl = 'https://pronto-psicologo-backend-production.up.railway.app';
@@ -23,6 +24,8 @@ class AuthService {
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
+    // Chiude il canale in tempo reale della sessione (logout o account eliminato)
+    RealtimeService.instance.disconnect();
   }
 
   Future<void> login(String email, String password) async {
@@ -79,11 +82,16 @@ class AuthService {
       body: jsonEncode({'fcmToken': fcmToken}),
     );
 
-    // Aggiorna il token anche quando Firebase lo rinnova
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      syncFcmToken().catchError((_) {});
-    });
+    // Aggiorna il token anche quando Firebase lo rinnova (un solo listener per sessione app)
+    if (!_tokenRefreshListening) {
+      _tokenRefreshListening = true;
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+        syncFcmToken().catchError((_) {});
+      });
+    }
   }
+
+  static bool _tokenRefreshListening = false;
 
   Future<void> register(Map<String, dynamic> data) async {
     final response = await http.post(
@@ -102,6 +110,79 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
     syncFcmToken().catchError((_) {});
+  }
+
+  // ── Recupero password ─────────────────────────────────────
+
+  /// Il backend risponde sempre con lo stesso messaggio (non rivela se l'email esiste).
+  Future<String> forgotPassword(String email) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/forgot-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+    if (response.statusCode == 429) {
+      throw Exception('Troppe richieste. Riprova tra un minuto.');
+    }
+    if (response.statusCode != 200) throw Exception(_errorMessage(response, 'Richiesta non riuscita'));
+    return (jsonDecode(response.body) as Map<String, dynamic>)['message'] as String;
+  }
+
+  Future<void> resetPassword(String token, String password) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'token': token, 'password': password}),
+    );
+    if (response.statusCode == 429) {
+      throw Exception('Troppi tentativi. Riprova tra un minuto.');
+    }
+    if (response.statusCode != 200) throw Exception(_errorMessage(response, 'Reset non riuscito'));
+  }
+
+  /// Cancellazione definitiva dell'account (richiede la password). In caso di
+  /// successo rimuove anche il token locale.
+  Future<void> deleteAccount(String password) async {
+    final token = await getToken();
+    if (token == null) throw Exception('Non autenticato');
+    final response = await http.post(
+      Uri.parse('$baseUrl/account/delete'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'password': password}),
+    );
+    if (response.statusCode == 429) {
+      throw Exception('Troppi tentativi. Riprova tra un minuto.');
+    }
+    if (response.statusCode != 200) throw Exception(_errorMessage(response, 'Cancellazione non riuscita'));
+    await logout();
+  }
+
+  /// Export dei dati personali (GDPR). Ritorna il JSON già formattato.
+  Future<String> exportMyData(String password) async {
+    final token = await getToken();
+    if (token == null) throw Exception('Non autenticato');
+    final response = await http.post(
+      Uri.parse('$baseUrl/account/export'),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+      body: jsonEncode({'password': password}),
+    );
+    if (response.statusCode == 429) {
+      throw Exception('Troppe richieste. Riprova tra un minuto.');
+    }
+    if (response.statusCode != 200) throw Exception(_errorMessage(response, 'Export non riuscito'));
+    // utf8.decode: response.body userebbe latin1 se manca il charset
+    final data = jsonDecode(utf8.decode(response.bodyBytes));
+    return const JsonEncoder.withIndent('  ').convert(data);
+  }
+
+  /// Nest restituisce `message` come stringa o come lista (errori di validazione).
+  static String _errorMessage(http.Response response, String fallback) {
+    try {
+      final msg = (jsonDecode(response.body) as Map<String, dynamic>)['message'];
+      if (msg is List) return msg.join('\n');
+      if (msg is String) return msg;
+    } catch (_) {}
+    return fallback;
   }
 
   Future<Map<String, dynamic>> getProfile() async {

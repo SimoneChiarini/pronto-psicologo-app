@@ -522,13 +522,23 @@ class ApiService {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  Future<void> updateAdminSettings({double? radiusKm, int? expandMinutes, int? maxAnswers}) async {
+  Future<void> updateAdminSettings({double? radiusKm, int? expandMinutes, int? maxAnswers, int? maxGroupMembers}) async {
     final headers = await _authHeaders();
     final body = <String, dynamic>{};
     if (radiusKm != null) body['radiusKm'] = radiusKm;
     if (expandMinutes != null) body['expandMinutes'] = expandMinutes;
     if (maxAnswers != null) body['maxAnswers'] = maxAnswers;
-    await http.patch(Uri.parse('$baseUrl/admin/settings'), headers: headers, body: jsonEncode(body));
+    if (maxGroupMembers != null) body['maxGroupMembers'] = maxGroupMembers;
+    final response = await http.patch(Uri.parse('$baseUrl/admin/settings'), headers: headers, body: jsonEncode(body));
+    if (response.statusCode != 200) {
+      String msg = 'Impostazioni non salvate';
+      try {
+        final m = jsonDecode(response.body)['message'];
+        if (m is List) msg = m.join('\n');
+        if (m is String) msg = m;
+      } catch (_) {}
+      throw Exception(msg);
+    }
   }
 
   Future<List<Map<String, dynamic>>> getAdminUsers() async {
@@ -543,6 +553,28 @@ class ApiService {
     final response = await http.get(Uri.parse('$baseUrl/admin/psychologists'), headers: headers);
     if (response.statusCode != 200) throw Exception('Errore');
     return (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Cancellazione definitiva di un account cliente (solo admin).
+  /// Il backend disdice eventuali abbonamenti e rimuove file e dati collegati.
+  Future<void> adminDeleteUser(String userId) =>
+      _adminDelete('$baseUrl/users/$userId');
+
+  /// Cancellazione definitiva dell'account di uno psicologo, dato l'id del profilo (solo admin).
+  Future<void> adminDeletePsychologist(String psychologistId) =>
+      _adminDelete('$baseUrl/psychologists/$psychologistId');
+
+  Future<void> _adminDelete(String url) async {
+    final headers = await _authHeaders();
+    final response = await http.delete(Uri.parse(url), headers: headers);
+    if (response.statusCode != 200) {
+      String msg = 'Errore nella cancellazione';
+      try {
+        final m = jsonDecode(response.body)['message'];
+        if (m is String) msg = m;
+      } catch (_) {}
+      throw Exception(msg);
+    }
   }
 
   /// Imposta lo stato di verifica albo di uno psicologo (solo admin).

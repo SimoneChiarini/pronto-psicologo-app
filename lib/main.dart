@@ -10,6 +10,8 @@ import 'pages/conversation_page.dart';
 import 'pages/psychologist_profile_page.dart';
 import 'pages/email_pending_page.dart';
 import 'pages/phone_verify_page.dart';
+import 'pages/forgot_password_page.dart';
+import 'pages/reset_password_page.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
@@ -75,6 +77,25 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomePage(),
       },
       onGenerateRoute: (settings) {
+        // Il link dell'email arriva come /#/reset-password?token=... : il nome
+        // della rotta include la query string, quindi va confrontato il solo path.
+        final uri = Uri.tryParse(settings.name ?? '');
+        if (uri?.path == '/reset-password') {
+          return MaterialPageRoute(
+            settings: settings,
+            builder: (_) => ResetPasswordPage(token: uri!.queryParameters['token']),
+          );
+        }
+        // Ritorno da Stripe (pagamento supervisione / configurazione incassi)
+        if (uri?.path == '/pro') {
+          return MaterialPageRoute(settings: settings, builder: (_) => const HomePage(openProTab: true));
+        }
+        if (uri?.path == '/forgot-password') {
+          final args = settings.arguments as Map<String, dynamic>?;
+          return MaterialPageRoute(
+            builder: (_) => ForgotPasswordPage(initialEmail: args?['email'] as String?),
+          );
+        }
         if (settings.name == '/conversation') {
           final args = settings.arguments as Map<String, dynamic>;
           return MaterialPageRoute(
