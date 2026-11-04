@@ -128,13 +128,26 @@ class ApiService {
     return list.cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>?> getPsychologistByUserId(String userId) async {
-    final list = await getPsychologists();
-    try {
-      return list.firstWhere((p) => p['userId'] == userId);
-    } catch (_) {
-      return null;
-    }
+  /// Profilo di uno psicologo. Se loggati invia il token, così il proprietario
+  /// (o l'admin) vede il profilo anche prima che sia pubblicato.
+  Future<Map<String, dynamic>> getPsychologist(String id) async {
+    final token = await _auth.getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/psychologists/$id'),
+      headers: token != null ? {'Authorization': 'Bearer $token'} : null,
+    );
+    if (response.statusCode == 404) throw Exception('Psicologo non trovato');
+    if (response.statusCode != 200) throw Exception('Errore nel caricamento del profilo');
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// Profilo dello psicologo loggato (anche se non ancora verificato/abbonato).
+  Future<Map<String, dynamic>?> getMyPsychologist() async {
+    final headers = await _authHeaders();
+    final response = await http.get(Uri.parse('$baseUrl/psychologists/me'), headers: headers);
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) throw Exception('Errore nel caricamento del profilo');
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   Future<List<Map<String, dynamic>>> aiRankPsychologists(String query) async {

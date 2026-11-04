@@ -1770,7 +1770,7 @@ class _MyProfileTabState extends State<_MyProfileTab> {
 
   Future<void> _load() async {
     try {
-      final p = await ApiService().getPsychologistByUserId(widget.userId);
+      final p = await ApiService().getMyPsychologist();
       if (!mounted) return;
       setState(() { _psychId = p?['id'] as String?; _loading = false; });
     } catch (_) {

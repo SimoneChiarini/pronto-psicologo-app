@@ -57,12 +57,8 @@ class _PsychologistProfilePageState extends State<PsychologistProfilePage>
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final list = await _api.getPsychologists();
-      final found = list.cast<Map<String, dynamic>>()
-          .where((p) => p['id'] == widget.psychologistId)
-          .toList();
-      if (found.isEmpty) throw Exception('Psicologo non trovato');
-      setState(() { _psych = found.first; _loading = false; });
+      final p = await _api.getPsychologist(widget.psychologistId);
+      setState(() { _psych = p; _loading = false; });
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });
     }
