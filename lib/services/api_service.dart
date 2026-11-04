@@ -9,18 +9,37 @@ class ApiService {
 
   final AuthService _auth = AuthService();
 
-  /// Normalizza un URL immagine salvato nel DB sostituendo host/porta con
-  /// quelli correnti (fix per URL scritti con IP diverso dalla sessione corrente).
+  /// Normalizza un URL immagine salvato nel DB.
+  /// - Path relativo (`/uploads/...`) → prepende il baseUrl del backend.
+  /// - URL assoluto verso un host di sviluppo (localhost/IP privato) → riscrive
+  ///   host/porta con quelli correnti (fix per URL salvati con un IP di sessione diverso).
+  /// - Altri URL assoluti (es. CDN Cloudflare R2) → lasciati intatti.
   static String? resolveUrl(String? url) {
     if (url == null || url.isEmpty) return null;
     if (url.startsWith('/')) return '${AuthService.baseUrl}$url';
     try {
       final uri = Uri.parse(url);
-      final base = Uri.parse(AuthService.baseUrl);
-      return uri.replace(scheme: base.scheme, host: base.host, port: base.port).toString();
+      if (_isDevHost(uri.host)) {
+        final base = Uri.parse(AuthService.baseUrl);
+        return uri.replace(scheme: base.scheme, host: base.host, port: base.port).toString();
+      }
+      return url;
     } catch (_) {
       return url;
     }
+  }
+
+  /// Host locale/di sviluppo: localhost o range IP privati.
+  static bool _isDevHost(String host) {
+    if (host == 'localhost' || host == '127.0.0.1' || host == '10.0.2.2') return true;
+    if (host.startsWith('192.168.') || host.startsWith('10.')) return true;
+    // 172.16.0.0 – 172.31.255.255
+    final m = RegExp(r'^172\.(\d{1,3})\.').firstMatch(host);
+    if (m != null) {
+      final second = int.tryParse(m.group(1)!) ?? 0;
+      if (second >= 16 && second <= 31) return true;
+    }
+    return false;
   }
 
   static String _fmtDate(DateTime d) =>
@@ -172,6 +191,12 @@ class ApiService {
   Future<String> uploadImage(XFile imageFile) async {
     final uri = Uri.parse('$baseUrl/upload/image');
     final request = http.MultipartRequest('POST', uri);
+
+    // L'endpoint upload ora richiede autenticazione
+    final token = await _auth.getToken();
+    if (token != null) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
 
     final ext = imageFile.name.split('.').last.toLowerCase();
     String mimeType;
@@ -351,6 +376,67 @@ class ApiService {
     if (response.statusCode != 200 && response.statusCode != 201) {
       final body = jsonDecode(response.body);
       throw Exception(body['message'] ?? 'Errore nell\'invio della recensione');
+    }
+  }
+
+  /// `{canReview, alreadyReviewed}`: si può recensire solo uno psicologo con cui
+  /// si ha una conversazione, una volta sola.
+  Future<Map<String, dynamic>> getReviewEligibility(String psychologistId) async {
+    final headers = await _authHeaders();
+    final response = await http.get(
+      Uri.parse('$baseUrl/reviews/eligibility/$psychologistId'),
+      headers: headers,
+    );
+    if (response.statusCode != 200) throw Exception('Errore nel controllo recensione');
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  // ── SEGNALAZIONI ──────────────────────────────────────────
+
+  /// Segnala l'altra parte della conversazione (il backend ricava chi è).
+  Future<void> createReport({
+    required String conversationId,
+    required String reason,
+    String? details,
+  }) async {
+    final headers = await _authHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/reports'),
+      headers: headers,
+      body: jsonEncode({
+        'conversationId': conversationId,
+        'reason': reason,
+        if (details != null && details.isNotEmpty) 'details': details,
+      }),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? 'Errore nell\'invio della segnalazione');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAdminReports({String? status}) async {
+    final headers = await _authHeaders();
+    final uri = Uri.parse('$baseUrl/reports')
+        .replace(queryParameters: status != null ? {'status': status} : null);
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode != 200) throw Exception('Errore nel caricamento segnalazioni');
+    return (jsonDecode(response.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> adminUpdateReport(String id, {required String status, String? adminNote}) async {
+    final headers = await _authHeaders();
+    final response = await http.patch(
+      Uri.parse('$baseUrl/reports/$id'),
+      headers: headers,
+      body: jsonEncode({
+        'status': status,
+        if (adminNote != null) 'adminNote': adminNote,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? 'Errore nell\'aggiornamento');
     }
   }
 

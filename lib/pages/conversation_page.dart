@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../data/report_reasons.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
@@ -33,12 +34,24 @@ class _ConversationPageState extends State<ConversationPage> {
   List<Map<String, dynamic>> _messages = [];
   bool _loading = true;
   bool _sending = false;
-  bool _alreadyReviewed = false;
+  // Il pulsante recensione compare solo se il backend lo consente
+  // (conversazione esistente e nessuna recensione già lasciata).
+  bool _canReview = false;
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
+    if (widget.role == 'USER') _loadReviewEligibility();
+  }
+
+  Future<void> _loadReviewEligibility() async {
+    try {
+      final e = await ApiService().getReviewEligibility(widget.psychologistId);
+      if (mounted) setState(() => _canReview = e['canReview'] == true);
+    } catch (_) {
+      // In caso di errore il pulsante resta nascosto: il backend fa comunque il controllo
+    }
   }
 
   @override
@@ -98,9 +111,24 @@ class _ConversationPageState extends State<ConversationPage> {
         psychologistLabel: widget.psychologistLabel,
         psychologistId: widget.psychologistId,
         onSubmitted: () {
-          setState(() => _alreadyReviewed = true);
+          setState(() => _canReview = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Recensione inviata, grazie!')),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openReportDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => _ReportDialog(
+        conversationId: widget.conversationId,
+        otherPartyLabel: widget.psychologistLabel,
+        onSubmitted: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Segnalazione inviata. Il nostro team la esaminerà al più presto.')),
           );
         },
       ),
@@ -113,9 +141,9 @@ class _ConversationPageState extends State<ConversationPage> {
       backgroundColor: AppColors.bg,
       appBar: _ConversationAppBar(
         psychologistLabel: widget.psychologistLabel,
-        role: widget.role,
-        alreadyReviewed: _alreadyReviewed,
+        canReview: _canReview,
         onReview: _openReviewDialog,
+        onReport: _openReportDialog,
         onRefresh: _loadMessages,
       ),
       body: Column(
@@ -166,16 +194,16 @@ class _ConversationPageState extends State<ConversationPage> {
 
 class _ConversationAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String psychologistLabel;
-  final String role;
-  final bool alreadyReviewed;
+  final bool canReview;
   final VoidCallback onReview;
+  final VoidCallback onReport;
   final VoidCallback onRefresh;
 
   const _ConversationAppBar({
     required this.psychologistLabel,
-    required this.role,
-    required this.alreadyReviewed,
+    required this.canReview,
     required this.onReview,
+    required this.onReport,
     required this.onRefresh,
   });
 
@@ -218,12 +246,17 @@ class _ConversationAppBar extends StatelessWidget implements PreferredSizeWidget
               ],
             ),
           ),
-          if (role == 'USER' && !alreadyReviewed)
+          if (canReview)
             IconButton(
               icon: const Icon(Icons.star_outline_rounded, color: AppColors.textTertiary, size: 18),
               tooltip: 'Lascia una recensione',
               onPressed: onReview,
             ),
+          IconButton(
+            icon: const Icon(Icons.outlined_flag_rounded, color: AppColors.textTertiary, size: 18),
+            tooltip: 'Segnala',
+            onPressed: onReport,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: AppColors.textTertiary, size: 18),
             tooltip: 'Aggiorna',
@@ -601,6 +634,133 @@ class _ReviewDialogState extends State<_ReviewDialog> {
               ? const SizedBox(width: 16, height: 16,
                   child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.textInverse))
               : const Text('Invia'),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Dialog segnalazione
+// ─────────────────────────────────────────────────────────────
+
+class _ReportDialog extends StatefulWidget {
+  final String conversationId;
+  final String otherPartyLabel;
+  final VoidCallback onSubmitted;
+
+  const _ReportDialog({
+    required this.conversationId,
+    required this.otherPartyLabel,
+    required this.onSubmitted,
+  });
+
+  @override
+  State<_ReportDialog> createState() => _ReportDialogState();
+}
+
+class _ReportDialogState extends State<_ReportDialog> {
+  String? _reason;
+  final _detailsController = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _detailsController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final details = _detailsController.text.trim();
+    if (_reason == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona un motivo')),
+      );
+      return;
+    }
+    if (_reason == 'OTHER' && details.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Descrivi brevemente il problema')),
+      );
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      await ApiService().createReport(
+        conversationId: widget.conversationId,
+        reason: _reason!,
+        details: details.isNotEmpty ? details : null,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onSubmitted();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Segnala'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.otherPartyLabel,
+                style: const TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+            const SizedBox(height: 12),
+            const Text('Motivo',
+                style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600, fontSize: 12)),
+            const SizedBox(height: 4),
+            ...kReportReasons.entries.map((e) => RadioListTile<String>(
+                  value: e.key,
+                  groupValue: _reason,
+                  onChanged: _loading ? null : (v) => setState(() => _reason = v),
+                  title: Text(e.value, style: const TextStyle(fontSize: 13)),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                )),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _detailsController,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              decoration: InputDecoration(
+                labelText: _reason == 'OTHER' ? 'Descrivi il problema' : 'Dettagli (facoltativo)',
+                alignLabelWithHint: true,
+              ),
+              maxLines: 3,
+              maxLength: 2000,
+            ),
+            const Text(
+              'La segnalazione è riservata: l\'altra persona non saprà che l\'hai inviata. '
+              'Un amministratore potrà leggere questa conversazione per valutarla.',
+              style: TextStyle(color: AppColors.textTertiary, fontSize: 11, height: 1.4),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Annulla'),
+        ),
+        ElevatedButton(
+          onPressed: _loading ? null : _submit,
+          child: _loading
+              ? const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.textInverse))
+              : const Text('Invia segnalazione'),
         ),
       ],
     );

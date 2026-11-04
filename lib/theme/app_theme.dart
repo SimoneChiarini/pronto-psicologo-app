@@ -31,6 +31,7 @@ class AppColors {
   static const star    = Color(0xFFFFC107);
   static const error   = Color(0xFFFF5252);
   static const success = Color(0xFF4AC98A);
+  static const warning = Color(0xFFFFB020);
 }
 
 class AppTheme {

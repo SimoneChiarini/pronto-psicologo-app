@@ -163,7 +163,6 @@ class _PsychologistProfilePageState extends State<PsychologistProfilePage>
     final p = _psych!;
     final coverImage  = ApiService.resolveUrl(p['coverImage'] as String?);
     final profileImage = ApiService.resolveUrl(p['profileImage'] as String?);
-    final verified    = p['verified'] == true;
 
     // ── Content ──────────────────────────────────────────────
     final scrollBody = NestedScrollView(
@@ -185,7 +184,7 @@ class _PsychologistProfilePageState extends State<PsychologistProfilePage>
                   ),
                 ]
               : null,
-          expandedHeight: 220,
+          expandedHeight: 245,
           pinned: true,
           backgroundColor: AppColors.bg,
           foregroundColor: AppColors.textPrimary,
@@ -206,7 +205,6 @@ class _PsychologistProfilePageState extends State<PsychologistProfilePage>
           child: _ProfileInfo(
             psych: p,
             name: _fullName(),
-            verified: verified,
             isOwnProfile: widget.isOwnProfile,
             onEditTap: widget.isOwnProfile ? _openEdit : null,
           ),
@@ -278,7 +276,7 @@ class _ProfileHeader extends StatelessWidget {
           onTap: isOwnProfile ? onPickCover : null,
           child: SizedBox(
             width: double.infinity,
-            height: 180,
+            height: 207, // +15% rispetto ai 180 originali
             child: (coverImage != null)
                 ? Image.network(
                     coverImage!,
@@ -301,15 +299,17 @@ class _ProfileHeader extends StatelessWidget {
               ),
             ),
           ),
-        // Avatar
+        // Avatar — posizionato con top (relativo alla copertina) così l'overhang
+        // non viene tagliato dallo stretch del FlexibleSpaceBar.
+        // top 137 + altezza 100 = 237, dentro expandedHeight 245.
         Positioned(
-          bottom: -20, left: 20,
+          top: 137, left: 20,
           child: GestureDetector(
             onTap: isOwnProfile ? onPickAvatar : null,
             child: Stack(
               children: [
                 Container(
-                  width: 84, height: 84,
+                  width: 100, height: 100, // +20% rispetto agli 84 originali
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.bg, width: 3),
@@ -374,14 +374,12 @@ class _AvatarPlaceholder extends StatelessWidget {
 class _ProfileInfo extends StatelessWidget {
   final Map<String, dynamic> psych;
   final String name;
-  final bool verified;
   final bool isOwnProfile;
   final VoidCallback? onEditTap;
 
   const _ProfileInfo({
     required this.psych,
     required this.name,
-    required this.verified,
     required this.isOwnProfile,
     this.onEditTap,
   });
@@ -396,14 +394,13 @@ class _ProfileInfo extends StatelessWidget {
     final specs = tagLabels.take(8).toList();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 36, 20, 8),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(
             child: Text(name,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textStrong)),
           ),
-          if (verified) const Icon(Icons.verified_rounded, color: Colors.lightBlueAccent, size: 20),
           if (isOwnProfile && onEditTap != null) ...[
             const SizedBox(width: 8),
             GestureDetector(

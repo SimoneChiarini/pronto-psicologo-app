@@ -14,6 +14,7 @@ import '../widgets/tinder_swiper.dart';
 import '../widgets/specialization_picker.dart';
 import '../widgets/account_verification_card.dart';
 import '../data/specialization_data.dart';
+import '../data/report_reasons.dart';
 import 'psychologist_profile_page.dart';
 
 String _psychName(Map<String, dynamic> psych) {
@@ -496,6 +497,7 @@ class _AdminHomeState extends State<_AdminHome> {
       _AdminAnswersTab(),
       _AdminPsychologistsTab(),
       _AdminUsersTab(),
+      _AdminReportsTab(),
     ];
 
     return Scaffold(
@@ -564,6 +566,11 @@ class _AdminHomeState extends State<_AdminHome> {
             icon: Icon(Icons.people_outline_rounded),
             selectedIcon: Icon(Icons.people_rounded),
             label: 'Utenti',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.outlined_flag_rounded),
+            selectedIcon: Icon(Icons.flag_rounded),
+            label: 'Segnal.',
           ),
         ],
       ),
@@ -2378,6 +2385,209 @@ class _AdminConvDetailState extends State<_AdminConvDetail> {
   }
 }
 
+// ── Admin: Segnalazioni ───────────────────────────────────────
+
+class _AdminReportsTab extends StatefulWidget {
+  const _AdminReportsTab();
+  @override
+  State<_AdminReportsTab> createState() => _AdminReportsTabState();
+}
+
+class _AdminReportsTabState extends State<_AdminReportsTab> {
+  List<Map<String, dynamic>>? _items;
+  bool _loading = true;
+  bool _onlyPending = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final data = await ApiService().getAdminReports();
+      if (mounted) setState(() { _items = data; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    final all = _items ?? [];
+    if (!_onlyPending) return all;
+    return all.where((r) => r['status'] == 'OPEN' || r['status'] == 'IN_REVIEW').toList();
+  }
+
+  Future<void> _setStatus(Map<String, dynamic> report, String status) async {
+    String? note;
+    // Chiudere una segnalazione richiede una nota (traccia della decisione)
+    if (status == 'RESOLVED' || status == 'DISMISSED') {
+      note = await _askNote(report['adminNote'] as String?);
+      if (note == null) return;
+    }
+    try {
+      await ApiService().adminUpdateReport(report['id'] as String, status: status, adminNote: note);
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
+      );
+    }
+  }
+
+  Future<String?> _askNote(String? initial) {
+    final ctrl = TextEditingController(text: initial ?? '');
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nota per la chiusura'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(hintText: 'Es. utente avvisato, account sospeso…'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annulla')),
+          ElevatedButton(
+            onPressed: () {
+              final t = ctrl.text.trim();
+              if (t.isNotEmpty) Navigator.pop(ctx, t);
+            },
+            child: const Text('Conferma'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Color _statusColor(String s) => switch (s) {
+        'OPEN' => AppColors.error,
+        'IN_REVIEW' => AppColors.warning,
+        'RESOLVED' => AppColors.success,
+        _ => AppColors.textTertiary,
+      };
+
+  static String _roleLabel(Map<String, dynamic> u) =>
+      u['role'] == 'PSYCHOLOGIST' ? 'psicologo' : 'utente';
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    final filtered = _filtered;
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+        child: Row(children: [
+          ChoiceChip(
+            label: const Text('Da gestire'),
+            selected: _onlyPending,
+            onSelected: (_) => setState(() => _onlyPending = true),
+          ),
+          const SizedBox(width: 8),
+          ChoiceChip(
+            label: const Text('Tutte'),
+            selected: !_onlyPending,
+            onSelected: (_) => setState(() => _onlyPending = false),
+          ),
+        ]),
+      ),
+      Expanded(
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: filtered.isEmpty
+              ? ListView(children: [
+                  const SizedBox(height: 80),
+                  _emptyState(icon: Icons.outlined_flag_rounded, title: 'Nessuna segnalazione'),
+                ])
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) => _buildCard(filtered[i]),
+                ),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildCard(Map<String, dynamic> r) {
+    final reporter = r['reporter'] as Map<String, dynamic>? ?? {};
+    final reported = r['reported'] as Map<String, dynamic>? ?? {};
+    final conv = r['conversation'] as Map<String, dynamic>?;
+    final status = r['status'] as String? ?? 'OPEN';
+    final details = r['details'] as String?;
+    final note = r['adminNote'] as String?;
+    final date = DateTime.tryParse(r['createdAt'] as String? ?? '')?.toLocal();
+    final color = _statusColor(status);
+
+    return GlassCard(
+      radius: 14,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Text(kReportReasons[r['reason']] ?? r['reason'] as String,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(kReportStatuses[status] ?? status,
+                style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Text('Segnalato: ${_adminUserName(reported)} (${_roleLabel(reported)})',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        Text('Da: ${_adminUserName(reporter)} (${_roleLabel(reporter)})',
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        if (date != null)
+          Text(
+            '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} '
+            '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}',
+            style: const TextStyle(fontSize: 11, color: AppColors.textTertiary),
+          ),
+        if (details != null && details.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(details, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+        ],
+        if (note != null && note.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text('Nota admin: $note',
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontStyle: FontStyle.italic)),
+        ],
+        const SizedBox(height: 8),
+        Wrap(spacing: 4, runSpacing: 4, children: [
+          if (conv != null)
+            TextButton.icon(
+              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+              label: const Text('Conversazione'),
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => _AdminConvDetail(conv: conv),
+              ),
+            ),
+          if (status == 'OPEN')
+            TextButton(onPressed: () => _setStatus(r, 'IN_REVIEW'), child: const Text('Prendi in carico')),
+          if (status == 'OPEN' || status == 'IN_REVIEW') ...[
+            TextButton(onPressed: () => _setStatus(r, 'RESOLVED'), child: const Text('Risolta')),
+            TextButton(onPressed: () => _setStatus(r, 'DISMISSED'), child: const Text('Archivia')),
+          ],
+          if (status == 'RESOLVED' || status == 'DISMISSED')
+            TextButton(onPressed: () => _setStatus(r, 'OPEN'), child: const Text('Riapri')),
+        ]),
+      ]),
+    );
+  }
+}
+
 // ── Admin: Risposte ───────────────────────────────────────────
 
 class _AdminAnswersTab extends StatefulWidget {
@@ -2587,6 +2797,63 @@ class _AdminPsychologistsTabState extends State<_AdminPsychologistsTab> {
     }
   }
 
+  /// Badge con l'esito della verifica automatica dell'albo (CNOP).
+  /// Serve all'admin per capire a colpo d'occhio quali profili verificare a mano.
+  Widget _alboBadge(Map<String, dynamic> p) {
+    final result = p['alboCheckResult'] as String?;
+    final autoVerified = p['alboVerified'] == true;
+    if (result == null) return const SizedBox.shrink(); // profili pre-feature
+
+    late final IconData icon;
+    late final Color color;
+    late final String label;
+
+    if (autoVerified) {
+      icon = Icons.verified_rounded;
+      color = AppColors.success;
+      final ordine = p['alboOrdine'] as String?;
+      final sez = p['alboSezione'] as String?;
+      final extra = [ordine, sez != null ? 'sez. $sez' : null].whereType<String>().join(' · ');
+      label = 'Albo verificato in automatico${extra.isNotEmpty ? ' ($extra)' : ''}';
+    } else {
+      switch (result) {
+        case 'AMBIGUOUS':
+          icon = Icons.people_alt_rounded;
+          color = AppColors.warning;
+          label = 'Omonimi nell\'albo — verifica manuale';
+          break;
+        case 'NOT_FOUND':
+          icon = Icons.person_search_rounded;
+          color = AppColors.error;
+          label = 'Non trovato nell\'albo — verifica manuale';
+          break;
+        default: // ERROR
+          icon = Icons.cloud_off_rounded;
+          color = AppColors.textTertiary;
+          label = 'Verifica automatica non riuscita';
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(label,
+                style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -2628,6 +2895,7 @@ class _AdminPsychologistsTabState extends State<_AdminPsychologistsTab> {
                             if (user['email'] != null)
                               Text(user['email'] as String,
                                   style: const TextStyle(fontSize: 12, color: AppColors.textTertiary)),
+                            _alboBadge(p),
                           ])),
                         ]),
                         if (p['bio'] != null && (p['bio'] as String).isNotEmpty) ...[
